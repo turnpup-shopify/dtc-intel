@@ -4,6 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import ErrorPanel from "@/components/ErrorPanel";
 import { errorMessage, getJson, postJson } from "@/lib/client";
 
+interface PollResult {
+  ok: boolean;
+  companiesPolled: number;
+  totalAds: number;
+  alert: string | null;
+  report: { company: string; adsSeen: number; hooksTouched: number; error?: string }[];
+}
+
 interface Hook {
   id: string;
   companyName: string | null;
@@ -29,6 +37,8 @@ export default function HooksClient() {
   const [busy, setBusy] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [polling, setPolling] = useState(false);
+  const [pollReport, setPollReport] = useState<PollResult | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,6 +61,25 @@ export default function HooksClient() {
     setFlash(m);
     setTimeout(() => setFlash(null), 2500);
   };
+
+  /**
+   * Pull the latest ads now rather than waiting for the daily cron. The first
+   * run is the one that matters — an empty hooks queue is otherwise
+   * indistinguishable from a broken token.
+   */
+  async function pollNow() {
+    setPolling(true);
+    setPollReport(null);
+    try {
+      const result = await postJson<PollResult>("/api/poll", {});
+      setPollReport(result);
+      await load();
+    } catch (err) {
+      notify(errorMessage(err));
+    } finally {
+      setPolling(false);
+    }
+  }
 
   async function convert(hook: Hook) {
     const url = (drafts[hook.id] ?? "").trim();
@@ -108,18 +137,89 @@ export default function HooksClient() {
           page, paste the URL back.
         </span>
         {flash && (
-          <span className="text-xs ml-auto" style={{ color: "var(--accent)" }}>
+          <span className="text-xs" style={{ color: "var(--accent)" }}>
             {flash}
           </span>
         )}
+        <button
+          onClick={() => void pollNow()}
+          disabled={polling}
+          className="text-xs px-3 py-1.5 rounded ml-auto disabled:opacity-50"
+          style={{ background: "var(--panel-2)" }}
+          title="Fetch each seeded brand's live ads from the Meta Ad Library now"
+        >
+          {polling ? "Polling…" : "Poll now"}
+        </button>
       </div>
+
+      {pollReport && (
+        <div className="panel p-3 mb-3 text-xs">
+          <div className="flex gap-4">
+            <span>
+              <span className="muted">brands polled</span>{" "}
+              <span className="tabular-nums">{pollReport.companiesPolled}</span>
+            </span>
+            <span>
+              <span className="muted">ads seen</span>{" "}
+              <span className="tabular-nums">{pollReport.totalAds}</span>
+            </span>
+            <button
+              onClick={() => setPollReport(null)}
+              className="ml-auto muted hover:underline"
+            >
+              dismiss
+            </button>
+          </div>
+
+          {pollReport.alert && (
+            <p className="mt-2" style={{ color: "var(--warn)" }}>
+              {pollReport.alert}
+            </p>
+          )}
+
+          {pollReport.report.length > 0 && (
+            <table className="mt-2 w-full">
+              <tbody>
+                {pollReport.report.map((r) => (
+                  <tr key={r.company}>
+                    <td className="py-0.5 pr-4">{r.company}</td>
+                    <td className="py-0.5 pr-4 tabular-nums muted">{r.adsSeen} ads</td>
+                    <td
+                      className="py-0.5"
+                      style={{ color: r.error ? "var(--danger)" : "var(--muted)" }}
+                    >
+                      {r.error ?? `${r.hooksTouched} hooks`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <p className="muted text-sm">Loading…</p>
       ) : hooks.length === 0 ? (
-        <p className="muted text-sm">
-          No new hooks. The daily poll fills this once companies have a meta_page_id.
-        </p>
+        <div className="muted text-sm">
+          <p>No hooks yet. Two things have to be true before this fills:</p>
+          <ol className="mt-2 ml-4 list-decimal space-y-1">
+            <li>
+              At least one brand has a <code>meta_page_id</code> on{" "}
+              <a href="/companies" className="hover:underline" style={{ color: "var(--accent)" }}>
+                /companies
+              </a>
+              .
+            </li>
+            <li>
+              A poll has run — hit <strong>Poll now</strong> above, or wait for the daily cron.
+            </li>
+          </ol>
+          <p className="mt-3">
+            Remember the Ad Library gives headlines, not landing page URLs. You click the
+            snapshot, land on the page, and paste its URL back here.
+          </p>
+        </div>
       ) : (
         <div className="panel overflow-hidden">
           <table className="w-full text-sm">
