@@ -86,6 +86,12 @@ Recapture hashes the cleaned text. Same hash is a no-op (and skips the model cal
 Different hash inserts a new version, flips `is_current`, and leaves the old blocks intact —
 so "this page's hero changed in March" comes for free.
 
+**Human decisions are permanent; the gate's are not.** On recapture, a page you have never
+reviewed (`reviewed_at IS NULL`) is re-gated against the new score — so a page auto-discarded
+at 3.2 that gets rewritten and now scores 4.6 comes back into the queue instead of being
+buried forever. Once you have ruled on a page, its status, stars, and tags are yours and
+recapture never overwrites them.
+
 ---
 
 ## API

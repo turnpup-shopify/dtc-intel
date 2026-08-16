@@ -18,14 +18,6 @@ export function expectedToken(): string {
   return createHash("sha256").update(`dtc-intel:${env.appPassword}`).digest("hex");
 }
 
-export function tokenIsValid(token: string | undefined): boolean {
-  if (!authEnabled()) return true;
-  if (!token) return false;
-  const a = Buffer.from(token);
-  const b = Buffer.from(expectedToken());
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
 /** Guards /api/cron/*. Vercel Cron sends `Authorization: Bearer $CRON_SECRET`. */
 export function cronRequestIsAuthorized(request: Request): boolean {
   const secret = env.cronSecret;

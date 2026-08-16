@@ -80,7 +80,14 @@ export default function HooksClient() {
       body: JSON.stringify({ status }),
     });
     setBusy(null);
-    setHooks((prev) => prev.filter((h) => h.id !== hook.id));
+
+    // `clicked` is a breadcrumb, not a decision — the row has to stay put,
+    // because the paste-back field is where the human is headed next.
+    if (status === "dismissed") {
+      setHooks((prev) => prev.filter((h) => h.id !== hook.id));
+    } else {
+      setHooks((prev) => prev.map((h) => (h.id === hook.id ? { ...h, status } : h)));
+    }
   }
 
   return (

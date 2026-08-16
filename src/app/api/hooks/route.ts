@@ -11,7 +11,9 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
-  const status = params.get("status") ?? "new";
+  // Default to work-in-progress: `new` plus `clicked`, so a hook you opened but
+  // haven't pasted back yet survives a refresh.
+  const status = params.get("status")?.split(",") ?? ["new", "clicked"];
   const limit = Math.min(Number(params.get("limit")) || 50, 200);
 
   const { data, error } = await db()
@@ -21,7 +23,7 @@ export async function GET(request: Request) {
     .select(
       "id, display_title, variant_count, peak_variant_count, days_running, first_seen_at, last_seen_at, snapshot_url, status, company_id, companies(name)"
     )
-    .eq("status", status)
+    .in("status", status)
     .order("variant_count", { ascending: false })
     .order("days_running", { ascending: false })
     .limit(limit);

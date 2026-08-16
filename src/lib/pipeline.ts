@@ -35,12 +35,14 @@ export async function processUrl(
   let urlNormalized = "";
 
   try {
-    // Normalize the input once so a bad paste fails before we spend a scrape.
-    urlNormalized = normalizeUrl(rawUrl);
+    // Validate before spending a scrape, but fetch the URL exactly as given —
+    // normalization is an identity step, not a fetch step. Stripping params
+    // here would capture a different page than the one the human is looking at.
+    const requestUrl = new URL(rawUrl.trim()).toString();
 
-    const scraped = await scraper().fetch(urlNormalized);
+    const scraped = await scraper().fetch(requestUrl);
     // Redirects are resolved by the adapter; the FINAL url is the identity.
-    const finalUrl = scraped.finalUrl || urlNormalized;
+    const finalUrl = scraped.finalUrl || requestUrl;
     urlNormalized = normalizeUrl(finalUrl);
 
     if (scraped.statusCode >= 400) {
@@ -188,19 +190,4 @@ async function uploadScreenshot(args: {
     return null;
   }
   return path;
-}
-
-/**
- * Batched processing for cron routes. Cap the batch and queue the remainder
- * rather than looping 50 pages in one invocation (spec §11).
- */
-export async function processBatch(
-  urls: { url: string; source: PageSource; sourceRef?: string | null }[],
-  limit: number
-): Promise<PipelineResult[]> {
-  const results: PipelineResult[] = [];
-  for (const item of urls.slice(0, limit)) {
-    results.push(await processUrl(item.url, { source: item.source, sourceRef: item.sourceRef }));
-  }
-  return results;
 }

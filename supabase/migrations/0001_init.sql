@@ -190,11 +190,18 @@ begin
     returning id into v_page_id;
     v_is_new := true;
   else
-    -- Recapture: refresh descriptive fields, preserve review state.
+    -- Recapture: refresh descriptive fields, preserve HUMAN review state.
+    --
+    -- A page the human never touched (reviewed_at is null) is still owned by
+    -- the auto-gate, so re-apply the gate's verdict. Without this, a page
+    -- discarded at 3.2 that gets rewritten and now scores 4.6 stays discarded
+    -- forever and never gets a second look. Once a human has ruled on it,
+    -- status/stars/tags are theirs and we never overwrite them.
     update pages
        set title      = coalesce(p_title, title),
            company_id = coalesce(company_id, p_company_id),
-           url        = p_url
+           url        = p_url,
+           status     = case when reviewed_at is null then p_status else status end
      where id = v_page_id;
   end if;
 

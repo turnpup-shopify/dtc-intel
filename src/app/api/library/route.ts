@@ -25,7 +25,13 @@ export async function GET(request: Request) {
 
   const { data: pages, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!pages?.length) return NextResponse.json({ pages: [], tags: [] });
+
+  if (!pages?.length) {
+    // Still return the tag vocabulary — system tags exist from ingestion, and
+    // /review reads this endpoint for its tag autocomplete before anything is saved.
+    const { data: allTags } = await db().from("tags").select("label").order("label");
+    return NextResponse.json({ pages: [], tags: (allTags ?? []).map((t) => t.label as string) });
+  }
 
   let pageIds = pages.map((p) => p.id as string);
 
