@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requires, withConfig } from "@/lib/api";
 import { db } from "@/lib/supabase";
+import { extractMetaPageId } from "@/lib/url";
 
 export const runtime = "nodejs";
 
@@ -18,13 +19,19 @@ async function postHandler(request: Request, ctx: { params: Promise<{ id: string
   const update: Record<string, unknown> = {};
   if ("meta_page_id" in body) {
     const raw = String(body.meta_page_id ?? "").trim();
-    if (raw && !/^\d{5,25}$/.test(raw)) {
+    // Accept a bare id or a pasted Ad Library URL; store the id either way.
+    const pageId = raw ? extractMetaPageId(raw) : null;
+    if (raw && !pageId) {
       return NextResponse.json(
-        { error: "meta_page_id should be the numeric view_all_page_id from the Ad Library URL" },
+        {
+          error:
+            "Couldn't find a page_id in that. Paste the Ad Library URL for this brand " +
+            "(the one containing view_all_page_id=…) or just the numeric id.",
+        },
         { status: 400 }
       );
     }
-    update.meta_page_id = raw || null;
+    update.meta_page_id = pageId;
   }
   if ("domain" in body) update.domain = String(body.domain ?? "").trim() || null;
   if ("tier" in body) update.tier = String(body.tier ?? "").trim() || null;

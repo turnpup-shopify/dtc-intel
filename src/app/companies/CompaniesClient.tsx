@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import ErrorPanel from "@/components/ErrorPanel";
 import { errorMessage, getJson, postJson } from "@/lib/client";
+import { adLibrarySearchUrl, extractMetaPageId } from "@/lib/url";
 
 interface Company {
   id: string;
@@ -48,8 +49,19 @@ export default function CompaniesClient() {
   }, [load]);
 
   async function savePageId(company: Company) {
-    const value = (drafts[company.id] ?? company.meta_page_id ?? "").trim();
-    if (value === (company.meta_page_id ?? "")) return;
+    const raw = (drafts[company.id] ?? company.meta_page_id ?? "").trim();
+
+    // Accept a pasted Ad Library URL, not just the bare digits — that URL is
+    // what's on the clipboard after clicking through to the advertiser.
+    const value = raw ? extractMetaPageId(raw) : "";
+    if (raw && !value) {
+      setNotice(
+        `Couldn't find a page_id in that. Paste the Ad Library URL for ${company.name} ` +
+          `(the one containing view_all_page_id=…) or just the numeric id.`
+      );
+      return;
+    }
+    if ((value ?? "") === (company.meta_page_id ?? "")) return;
 
     try {
       await postJson(`/api/companies/${company.id}`, { meta_page_id: value });
@@ -59,6 +71,7 @@ export default function CompaniesClient() {
     }
 
     setNotice(null);
+    setDrafts((d) => ({ ...d, [company.id]: value ?? "" }));
     setCompanies((prev) =>
       prev.map((c) => (c.id === company.id ? { ...c, meta_page_id: value || null } : c))
     );
@@ -89,8 +102,9 @@ export default function CompaniesClient() {
       <div className="flex items-baseline gap-3 mb-3">
         <h1 className="text-sm font-medium">Companies</h1>
         <span className="muted text-xs">
-          {mapped}/{companies.length} have a page_id · grab it from the Ad Library URL parameter{" "}
-          <code>view_all_page_id</code>
+          {mapped}/{companies.length} have a page_id · click{" "}
+          <span style={{ color: "var(--accent)" }}>search Ad Library</span>, open the advertiser,
+          then paste that page&apos;s URL back into the field
         </span>
         {notice && (
           <span className="text-xs" style={{ color: "var(--danger)" }}>
@@ -145,20 +159,35 @@ export default function CompaniesClient() {
                 <th className="px-3 py-2 font-normal">Tier</th>
                 <th className="px-3 py-2 font-normal">Category</th>
                 <th className="px-3 py-2 font-normal">meta_page_id</th>
+                <th className="px-3 py-2 font-normal">Find it</th>
               </tr>
             </thead>
             <tbody>
               {companies.map((c) => (
                 <tr key={c.id} className="border-b" style={{ borderColor: "var(--border)" }}>
                   <td className="px-3 py-1.5 whitespace-nowrap">{c.name}</td>
-                  <td className="px-3 py-1.5 muted text-xs">{c.domain ?? "—"}</td>
+                  <td className="px-3 py-1.5 text-xs">
+                    {c.domain ? (
+                      <a
+                        href={`https://${c.domain}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="muted hover:underline"
+                        title={`Open ${c.domain}`}
+                      >
+                        {c.domain} ↗
+                      </a>
+                    ) : (
+                      <span className="muted">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-1.5 text-xs">{c.tier ?? "—"}</td>
                   <td className="px-3 py-1.5 muted text-xs">{c.category ?? "—"}</td>
                   <td className="px-3 py-1.5">
                     <input
-                      className="text-xs w-48 font-mono"
-                      placeholder="paste page_id"
-                      defaultValue={c.meta_page_id ?? ""}
+                      className="text-xs w-56 font-mono"
+                      placeholder="id, or paste Ad Library URL"
+                      value={drafts[c.id] ?? c.meta_page_id ?? ""}
                       onChange={(e) => setDrafts((d) => ({ ...d, [c.id]: e.target.value }))}
                       onBlur={() => void savePageId(c)}
                       onKeyDown={(e) => {
@@ -168,6 +197,30 @@ export default function CompaniesClient() {
                         borderColor: saved[c.id] ? "var(--accent)" : undefined,
                       }}
                     />
+                  </td>
+                  <td className="px-3 py-1.5 whitespace-nowrap">
+                    {c.meta_page_id ? (
+                      <a
+                        href={`https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&view_all_page_id=${c.meta_page_id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs muted hover:underline"
+                        title="See this brand's live ads"
+                      >
+                        view ads ↗
+                      </a>
+                    ) : (
+                      <a
+                        href={adLibrarySearchUrl(c.name)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs hover:underline"
+                        style={{ color: "var(--accent)" }}
+                        title={`Search the Ad Library for ${c.name}, click the advertiser, then paste the URL back`}
+                      >
+                        search Ad Library ↗
+                      </a>
+                    )}
                   </td>
                 </tr>
               ))}
