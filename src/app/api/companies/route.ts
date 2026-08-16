@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requires, withConfig } from "@/lib/api";
+import { CATEGORIES, isCategory } from "@/lib/categories";
 import { db } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -22,6 +23,15 @@ async function postHandler(request: Request) {
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   if (!body.name || typeof body.name !== "string") {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
+  }
+
+  // Reject an off-taxonomy category here, with the valid set, rather than
+  // letting Postgres return a raw check-constraint violation.
+  if (body.category && !isCategory(body.category)) {
+    return NextResponse.json(
+      { error: `category must be one of: ${CATEGORIES.join(", ")}` },
+      { status: 400 }
+    );
   }
 
   const { data, error } = await db()

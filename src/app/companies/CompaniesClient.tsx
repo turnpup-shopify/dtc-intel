@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import ErrorPanel from "@/components/ErrorPanel";
 import { errorMessage, getJson, postJson } from "@/lib/client";
+import { CATEGORIES, TIERS } from "@/lib/categories";
 import { adLibrarySearchUrl, extractMetaPageId } from "@/lib/url";
 
 interface Company {
@@ -29,7 +30,7 @@ export default function CompaniesClient() {
   /** Inline, non-blocking (a single save failed). */
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [adding, setAdding] = useState({ name: "", domain: "", tier: "direct", category: "" });
+  const [adding, setAdding] = useState({ name: "", domain: "", tier: "direct", category: "supplements" });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,7 +90,7 @@ export default function CompaniesClient() {
       return;
     }
     setNotice(null);
-    setAdding({ name: "", domain: "", tier: "direct", category: "" });
+    setAdding({ name: "", domain: "", tier: "direct", category: "supplements" });
     void load();
   }
 
@@ -131,17 +132,24 @@ export default function CompaniesClient() {
           value={adding.tier}
           onChange={(e) => setAdding({ ...adding, tier: e.target.value })}
         >
-          <option value="direct">direct</option>
-          <option value="adjacent">adjacent</option>
-          <option value="copycraft">copycraft</option>
-          <option value="advertorial">advertorial</option>
+          {TIERS.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
         </select>
-        <input
+        <select
           className="text-xs"
-          placeholder="category"
           value={adding.category}
           onChange={(e) => setAdding({ ...adding, category: e.target.value })}
-        />
+        >
+          <option value="">category…</option>
+          {CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
         <button type="submit" className="text-xs px-3 rounded" style={{ background: "var(--panel-2)" }}>
           Add
         </button>

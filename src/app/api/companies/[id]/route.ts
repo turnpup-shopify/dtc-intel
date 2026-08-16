@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requires, withConfig } from "@/lib/api";
+import { CATEGORIES, isCategory } from "@/lib/categories";
 import { db } from "@/lib/supabase";
 import { extractMetaPageId } from "@/lib/url";
 
@@ -35,7 +36,16 @@ async function postHandler(request: Request, ctx: { params: Promise<{ id: string
   }
   if ("domain" in body) update.domain = String(body.domain ?? "").trim() || null;
   if ("tier" in body) update.tier = String(body.tier ?? "").trim() || null;
-  if ("category" in body) update.category = String(body.category ?? "").trim() || null;
+  if ("category" in body) {
+    const category = String(body.category ?? "").trim();
+    if (category && !isCategory(category)) {
+      return NextResponse.json(
+        { error: `category must be one of: ${CATEGORIES.join(", ")}` },
+        { status: 400 }
+      );
+    }
+    update.category = category || null;
+  }
   if ("active" in body) update.active = Boolean(body.active);
 
   if (Object.keys(update).length === 0) {
