@@ -158,6 +158,18 @@ Three, all forced:
 3. **A shared-password gate exists** (`APP_PASSWORD`, `src/middleware.ts`). Not in the spec, and
    not multi-tenancy — just a lock on the front door, since the app runs entirely on the
    service-role key.
+4. **Screenshots are stored in whatever format the provider returns**, not WebP. ScrapingBee
+   returns PNG and Scrapfly returns PNG or JPEG; converting would mean pulling `sharp` into a
+   serverless bundle for no retrieval benefit. The format is sniffed from magic bytes and
+   labelled honestly, and a non-image body (an API-key error, a rate-limit HTML page) is
+   rejected rather than stored as a broken image.
+
+## Deployment gotcha
+
+The pipeline routes set `maxDuration = 300`, because one capture is a scrape plus a screenshot
+plus a model call. Vercel enforces the ceiling by plan — if your plan caps function duration
+lower, the deploy will fail on that value. Lower it and expect the occasional slow page to time
+out, or raise the plan.
 
 ---
 

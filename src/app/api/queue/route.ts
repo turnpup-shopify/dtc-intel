@@ -26,9 +26,12 @@ export interface ReviewItem {
  * the review screen needs in one round trip.
  */
 export async function GET(request: Request) {
+  // A session's worth, not the whole backlog. Kept small on purpose: the blocks
+  // query below fans out per page, and a large batch would brush against
+  // PostgREST's row cap and silently drop the last page's copy.
   const limit = Math.min(
-    Number(new URL(request.url).searchParams.get("limit")) || 25,
-    100
+    Number(new URL(request.url).searchParams.get("limit")) || 15,
+    50
   );
 
   const { data: pages, error } = await db()
@@ -54,7 +57,8 @@ export async function GET(request: Request) {
         .from("copy_blocks")
         .select("id, page_id, page_version_id, block_type, content, position")
         .in("page_id", pageIds)
-        .order("position", { ascending: true }),
+        .order("position", { ascending: true })
+        .limit(2000),
       db().from("page_tags").select("page_id, tags(label)").in("page_id", pageIds),
       db().from("pages").select("id", { count: "exact", head: true }).eq("status", "queued"),
     ]);

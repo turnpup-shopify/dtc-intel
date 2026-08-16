@@ -32,26 +32,33 @@ export async function POST(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const { data: known } = await db().from("pages").select("url_normalized");
-  const seen = new Set((known ?? []).map((p) => p.url_normalized as string));
-
-  const candidates: { url: string; companyId: string; company: string }[] = [];
+  // Collect every sitemap candidate first, then ask the database which of THOSE
+  // it already has. Loading the whole `pages` table instead would silently stop
+  // deduping once the archive outgrows PostgREST's row cap, and the job would
+  // re-scrape and re-score pages it already owns, every week, forever.
+  const seenThisRun = new Set<string>();
+  const candidates: { url: string; norm: string; companyId: string; company: string }[] = [];
   const perCompany: { company: string; found: number; fresh: number; error?: string }[] = [];
 
   for (const company of companies ?? []) {
     try {
       const urls = await fetchSitemapPageUrls(company.domain as string);
-      const fresh = urls
-        .map((u) => ({ raw: u, norm: tryNormalizeUrl(u) }))
-        .filter((u): u is { raw: string; norm: string } => Boolean(u.norm))
-        .filter((u) => !seen.has(u.norm));
+      let fresh = 0;
 
-      for (const u of fresh) {
-        seen.add(u.norm); // dedupe within this run too
-        candidates.push({ url: u.raw, companyId: company.id as string, company: company.name as string });
+      for (const raw of urls) {
+        const norm = tryNormalizeUrl(raw);
+        if (!norm || seenThisRun.has(norm)) continue;
+        seenThisRun.add(norm);
+        fresh++;
+        candidates.push({
+          url: raw,
+          norm,
+          companyId: company.id as string,
+          company: company.name as string,
+        });
       }
 
-      perCompany.push({ company: company.name as string, found: urls.length, fresh: fresh.length });
+      perCompany.push({ company: company.name as string, found: urls.length, fresh });
     } catch (err) {
       perCompany.push({
         company: company.name as string,
@@ -62,8 +69,11 @@ export async function POST(request: Request) {
     }
   }
 
-  const batch = candidates.slice(0, cap);
-  const deferred = candidates.length - batch.length;
+  const known = await knownUrls(candidates.map((c) => c.norm));
+  const unknown = candidates.filter((c) => !known.has(c.norm));
+
+  const batch = unknown.slice(0, cap);
+  const deferred = unknown.length - batch.length;
 
   const processed = [];
   for (const candidate of batch) {
@@ -87,6 +97,8 @@ export async function POST(request: Request) {
     ok: true,
     cap,
     candidatesFound: candidates.length,
+    alreadyKnown: candidates.length - unknown.length,
+    newUrls: unknown.length,
     processed: processed.length,
     deferred,
     queued,
@@ -98,3 +110,26 @@ export async function POST(request: Request) {
 }
 
 export const GET = POST;
+
+/**
+ * Which of these normalized URLs do we already have? Chunked, because a large
+ * sitemap sweep can produce more candidates than fit in one `in()` filter.
+ */
+async function knownUrls(norms: string[]): Promise<Set<string>> {
+  const known = new Set<string>();
+  const CHUNK = 200;
+
+  for (let i = 0; i < norms.length; i += CHUNK) {
+    const chunk = norms.slice(i, i + CHUNK);
+    const { data, error } = await db()
+      .from("pages")
+      .select("url_normalized")
+      .in("url_normalized", chunk)
+      .limit(chunk.length);
+
+    if (error) throw new Error(`known-url lookup failed: ${error.message}`);
+    for (const row of data ?? []) known.add(row.url_normalized as string);
+  }
+
+  return known;
+}

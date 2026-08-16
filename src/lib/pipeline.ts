@@ -168,8 +168,33 @@ async function resolveCompanyId(urlNormalized: string): Promise<string | null> {
 }
 
 /**
- * screenshots/{domain}/{hash-prefix}.webp in a private bucket, read via signed
- * URLs. Storage failures never fail the capture — the copy is the asset.
+ * Detect the real image format from magic bytes.
+ *
+ * The spec asks for WebP, but no scraping provider returns it — ScrapingBee
+ * sends PNG, Scrapfly sends PNG or JPEG — and converting would mean pulling
+ * sharp into a serverless bundle for no retrieval benefit. Store what we
+ * actually got, labelled honestly, rather than serving PNG bytes as WebP.
+ */
+function sniffImageType(buffer: Buffer): { ext: string; contentType: string } {
+  if (buffer.length >= 8 && buffer.subarray(0, 4).toString("hex") === "89504e47") {
+    return { ext: "png", contentType: "image/png" };
+  }
+  if (buffer.length >= 3 && buffer.subarray(0, 3).toString("hex") === "ffd8ff") {
+    return { ext: "jpg", contentType: "image/jpeg" };
+  }
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+    buffer.subarray(8, 12).toString("ascii") === "WEBP"
+  ) {
+    return { ext: "webp", contentType: "image/webp" };
+  }
+  return { ext: "bin", contentType: "application/octet-stream" };
+}
+
+/**
+ * {domain}/{hash-prefix}.{ext} in the private `screenshots` bucket, read via
+ * signed URLs. Storage failures never fail the capture — the copy is the asset.
  */
 async function uploadScreenshot(args: {
   buffer: Buffer;
@@ -178,12 +203,21 @@ async function uploadScreenshot(args: {
 }): Promise<string | null> {
   if (!args.buffer || args.buffer.length === 0) return null;
 
+  const { ext, contentType } = sniffImageType(args.buffer);
+  if (ext === "bin") {
+    console.error(
+      `[pipeline] screenshot for ${args.urlNormalized} is not a recognized image ` +
+        `(${args.buffer.length} bytes) — the provider likely returned an error body`
+    );
+    return null;
+  }
+
   const domain = hostOf(args.urlNormalized) ?? "unknown";
-  const path = `screenshots/${domain}/${args.contentHash.slice(0, 16)}.webp`;
+  const path = `${domain}/${args.contentHash.slice(0, 16)}.${ext}`;
 
   const { error } = await db()
     .storage.from(SCREENSHOT_BUCKET)
-    .upload(path, args.buffer, { contentType: "image/webp", upsert: true });
+    .upload(path, args.buffer, { contentType, upsert: true });
 
   if (error) {
     console.error(`[pipeline] screenshot upload failed for ${args.urlNormalized}:`, error.message);
