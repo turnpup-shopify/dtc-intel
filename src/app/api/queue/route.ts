@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requires, withConfig } from "@/lib/api";
 import { db, signedScreenshotUrl } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -25,7 +26,7 @@ export interface ReviewItem {
  * GET /api/queue — pages where status='queued', oldest first, with everything
  * the review screen needs in one round trip.
  */
-export async function GET(request: Request) {
+async function getHandler(request: Request) {
   // A session's worth, not the whole backlog. Kept small on purpose: the blocks
   // query below fans out per page, and a large batch would brush against
   // PostgREST's row cap and silently drop the last page's copy.
@@ -105,3 +106,5 @@ export async function GET(request: Request) {
 
   return NextResponse.json({ items, pending: count ?? items.length });
 }
+
+export const GET = withConfig([requires.supabase], getHandler);

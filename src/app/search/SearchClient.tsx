@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import ErrorPanel from "@/components/ErrorPanel";
+import { errorMessage, getJson } from "@/lib/client";
 
 interface Result {
   blockId: string;
@@ -45,6 +47,7 @@ export default function SearchClient() {
   const [results, setResults] = useState<Result[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -56,16 +59,20 @@ export default function SearchClient() {
     if (company) params.set("company", company);
     if (minStars) params.set("min_stars", String(minStars));
 
-    const res = await fetch(`/api/search?${params}`);
-    const data = await res.json();
-    setResults(data.results ?? []);
-    setLoading(false);
+    setError(null);
+    try {
+      const data = await getJson<{ results: Result[] }>(`/api/search?${params}`);
+      setResults(data.results ?? []);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   }, [query, blockType, company, minStars]);
 
   useEffect(() => {
     inputRef.current?.focus();
-    void fetch("/api/companies")
-      .then((r) => r.json())
+    void getJson<{ companies: Company[] }>("/api/companies")
       .then((d) => setCompanies(d.companies ?? []))
       .catch(() => undefined);
   }, []);
@@ -123,6 +130,8 @@ export default function SearchClient() {
       <p className="muted text-xs mb-3">
         {loading ? "Searching…" : `${results.length} blocks`}
       </p>
+
+      {error && <ErrorPanel error={error} onRetry={() => void run()} />}
 
       <div className="grid gap-2">
         {results.map((r) => (

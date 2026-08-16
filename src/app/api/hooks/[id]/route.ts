@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requires, withConfig } from "@/lib/api";
 import { processUrl } from "@/lib/pipeline";
 import { db } from "@/lib/supabase";
 
@@ -12,7 +13,7 @@ export const maxDuration = 300;
  * snapshot, lands on the LP, pastes the URL here. That marks the hook
  * `converted` and pushes the page through the pipeline.
  */
-export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
+async function postHandler(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const body = (await request.json().catch(() => ({}))) as {
     status?: string;
@@ -56,3 +57,5 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
 
   return NextResponse.json({ ok: true, status });
 }
+
+export const POST = withConfig([requires.supabase, requires.anthropic, requires.scraper], postHandler);

@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import ErrorPanel from "@/components/ErrorPanel";
+import { errorMessage, getJson } from "@/lib/client";
 
 interface LibraryPage {
   id: string;
@@ -38,6 +40,7 @@ export default function LibraryClient() {
   const [tags, setTags] = useState<string[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [company, setCompany] = useState("");
   const [tag, setTag] = useState("");
@@ -50,11 +53,18 @@ export default function LibraryClient() {
     if (tag) params.set("tag", tag);
     if (blockType) params.set("block_type", blockType);
 
-    const res = await fetch(`/api/library?${params}`);
-    const data = await res.json();
-    setPages(data.pages ?? []);
-    setTags(data.tags ?? []);
-    setLoading(false);
+    setError(null);
+    try {
+      const data = await getJson<{ pages: LibraryPage[]; tags: string[] }>(
+        `/api/library?${params}`
+      );
+      setPages(data.pages ?? []);
+      setTags(data.tags ?? []);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   }, [company, tag, blockType]);
 
   useEffect(() => {
@@ -62,11 +72,12 @@ export default function LibraryClient() {
   }, [load]);
 
   useEffect(() => {
-    void fetch("/api/companies")
-      .then((r) => r.json())
+    void getJson<{ companies: Company[] }>("/api/companies")
       .then((d) => setCompanies(d.companies ?? []))
       .catch(() => undefined);
   }, []);
+
+  if (error) return <ErrorPanel error={error} onRetry={() => void load()} />;
 
   return (
     <div className="p-4">

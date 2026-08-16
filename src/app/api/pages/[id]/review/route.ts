@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requires, withConfig } from "@/lib/api";
 import { db } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -7,7 +8,7 @@ export const runtime = "nodejs";
  * POST /api/pages/:id/review { status, stars, tags[], notes }
  * Review state lives on `pages` and survives recaptures.
  */
-export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
+async function postHandler(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const body = (await request.json().catch(() => ({}))) as {
     status?: string;
@@ -89,3 +90,5 @@ async function syncTags(pageId: string, labels: string[]): Promise<string | null
 
   return linkError?.message ?? null;
 }
+
+export const POST = withConfig([requires.supabase], postHandler);

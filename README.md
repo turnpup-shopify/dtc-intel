@@ -54,6 +54,16 @@ public Vercel domain you want the gate.
 
 ---
 
+## Nothing loading?
+
+Open **`/api/health`**. It reports which environment variables are missing, whether the
+database is reachable, whether the schema has been applied, and whether any brands are seeded —
+and names the next step. The UI shows the same thing inline when a screen fails to load, so you
+should never be looking at a bare spinner.
+
+The usual order of operations on a fresh setup is: set the Supabase env vars → run the
+migration → `npm run seed`. Each stage tells you if the previous one hasn't happened.
+
 ## The five screens
 
 | Route        | What it does |

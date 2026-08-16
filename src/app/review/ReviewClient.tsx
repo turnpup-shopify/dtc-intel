@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ErrorPanel from "@/components/ErrorPanel";
+import { errorMessage, getJson, postJson } from "@/lib/client";
 
 interface ReviewItem {
   id: string;
@@ -49,6 +51,7 @@ export default function ReviewClient() {
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [flash, setFlash] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [tagging, setTagging] = useState(false);
   const [tagDraft, setTagDraft] = useState("");
   const [knownTags, setKnownTags] = useState<string[]>([]);
@@ -62,18 +65,22 @@ export default function ReviewClient() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/queue");
-    const data = await res.json();
-    setItems(data.items ?? []);
-    setPending(data.pending ?? 0);
-    setIndex(0);
-    setLoading(false);
+    setError(null);
+    try {
+      const data = await getJson<{ items: ReviewItem[]; pending: number }>("/api/queue");
+      setItems(data.items ?? []);
+      setPending(data.pending ?? 0);
+      setIndex(0);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
     void load();
-    void fetch("/api/library")
-      .then((r) => r.json())
+    void getJson<{ tags: string[] }>("/api/library")
       .then((d) => setKnownTags(d.tags ?? []))
       .catch(() => undefined);
   }, [load]);
@@ -101,12 +108,19 @@ export default function ReviewClient() {
       setIndex((i) => Math.min(i, Math.max(0, items.length - 2)));
       notify(status === "saved" ? `Saved · ${item.stars}★` : "Discarded");
 
-      const res = await fetch(`/api/pages/${item.id}/review`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status, stars: item.stars, tags: item.tags }),
-      });
-      if (!res.ok) notify("Save failed — reload");
+      try {
+        await postJson(`/api/pages/${item.id}/review`, {
+          status,
+          stars: item.stars,
+          tags: item.tags,
+        });
+      } catch (err) {
+        // Put it back rather than losing the decision silently.
+        setItems((prev) => [item, ...prev]);
+        setPending((p) => p + 1);
+        setIndex(0);
+        notify(`Save failed: ${errorMessage(err)}`);
+      }
     },
     [items, index]
   );
@@ -205,18 +219,17 @@ export default function ReviewClient() {
     e.preventDefault();
     if (!submitUrl.trim()) return;
     setSubmitting(true);
-    const res = await fetch("/api/pages", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: submitUrl.trim() }),
-    });
-    const body = await res.json().catch(() => ({}));
-    setSubmitting(false);
 
-    if (!res.ok) {
-      notify(body.error ?? "Capture failed");
+    let body: { unchanged?: boolean; status?: string; composite?: number };
+    try {
+      body = await postJson("/api/pages", { url: submitUrl.trim() });
+    } catch (err) {
+      setSubmitting(false);
+      notify(errorMessage(err));
       return;
     }
+    setSubmitting(false);
+
     if (body.unchanged) notify("Unchanged since last capture");
     else if (body.status === "discarded")
       notify(`Auto-rejected · ${body.composite?.toFixed(2)} below threshold`);
@@ -271,7 +284,9 @@ export default function ReviewClient() {
         </span>
       </div>
 
-      {loading ? (
+      {error ? (
+        <ErrorPanel error={error} onRetry={() => void load()} />
+      ) : loading ? (
         <p className="muted p-6 text-sm">Loading queue…</p>
       ) : !current ? (
         <div className="p-8">

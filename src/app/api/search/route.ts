@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requires, withConfig } from "@/lib/api";
 import { db } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
  * Results are BLOCKS, not pages — when you're writing a hero you want to see
  * thirty heroes. This is the screen that decides whether the product works.
  */
-export async function GET(request: Request) {
+async function getHandler(request: Request) {
   const params = new URL(request.url).searchParams;
 
   const { data, error } = await db().rpc("search_copy_blocks", {
@@ -54,3 +55,5 @@ export async function GET(request: Request) {
 
   return NextResponse.json({ results, count: results.length });
 }
+
+export const GET = withConfig([requires.supabase], getHandler);

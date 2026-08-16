@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requires, withConfig } from "@/lib/api";
 import { db } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -10,7 +11,7 @@ export const runtime = "nodejs";
  * from the Ad Library UI's `view_all_page_id` parameter and there is no
  * automated resolver (spec §1.5). Keep this fast.
  */
-export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
+async function postHandler(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
 
@@ -44,3 +45,5 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ company: data });
 }
+
+export const POST = withConfig([requires.supabase], postHandler);

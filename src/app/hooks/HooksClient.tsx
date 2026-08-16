@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import ErrorPanel from "@/components/ErrorPanel";
+import { errorMessage, getJson, postJson } from "@/lib/client";
 
 interface Hook {
   id: string;
@@ -26,13 +28,19 @@ export default function HooksClient() {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/hooks");
-    const data = await res.json();
-    setHooks(data.hooks ?? []);
-    setLoading(false);
+    setError(null);
+    try {
+      const data = await getJson<{ hooks: Hook[] }>("/api/hooks");
+      setHooks(data.hooks ?? []);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -49,19 +57,16 @@ export default function HooksClient() {
     if (!url) return;
     setBusy(hook.id);
 
-    const res = await fetch(`/api/hooks/${hook.id}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ resulting_url: url }),
-    });
-    const body = await res.json().catch(() => ({}));
-    setBusy(null);
-
-    if (!res.ok) {
-      notify(body.error ?? "Capture failed");
+    let body: { page?: Record<string, unknown> };
+    try {
+      body = await postJson(`/api/hooks/${hook.id}`, { resulting_url: url });
+    } catch (err) {
+      setBusy(null);
+      notify(errorMessage(err));
       return;
     }
-    const page = body.page ?? {};
+    setBusy(null);
+    const page = (body.page ?? {}) as { unchanged?: boolean; status?: string; composite?: number };
     notify(
       page.unchanged
         ? "Converted · page unchanged since last capture"
@@ -74,11 +79,13 @@ export default function HooksClient() {
 
   async function mark(hook: Hook, status: "clicked" | "dismissed") {
     setBusy(hook.id);
-    await fetch(`/api/hooks/${hook.id}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
+    try {
+      await postJson(`/api/hooks/${hook.id}`, { status });
+    } catch (err) {
+      setBusy(null);
+      notify(errorMessage(err));
+      return;
+    }
     setBusy(null);
 
     // `clicked` is a breadcrumb, not a decision — the row has to stay put,
@@ -89,6 +96,8 @@ export default function HooksClient() {
       setHooks((prev) => prev.map((h) => (h.id === hook.id ? { ...h, status } : h)));
     }
   }
+
+  if (error) return <ErrorPanel error={error} onRetry={() => void load()} />;
 
   return (
     <div className="p-4">

@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
+import { requires, withConfig } from "@/lib/api";
 import { db } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** GET /api/companies — the admin table's data source. */
-export async function GET() {
+async function getHandler() {
   const { data, error } = await db()
     .from("companies")
     .select("id, name, domain, meta_page_id, tier, category, active, added_at")
@@ -17,7 +18,7 @@ export async function GET() {
 }
 
 /** POST /api/companies { name, domain, tier, category, meta_page_id } — add a brand. */
-export async function POST(request: Request) {
+async function postHandler(request: Request) {
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   if (!body.name || typeof body.name !== "string") {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
@@ -38,3 +39,6 @@ export async function POST(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ company: data });
 }
+
+export const GET = withConfig([requires.supabase], getHandler);
+export const POST = withConfig([requires.supabase], postHandler);

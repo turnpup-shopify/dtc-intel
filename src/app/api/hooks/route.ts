@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requires, withConfig } from "@/lib/api";
 import { db } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
  * then longevity. Both signals are accumulated from our own polling history;
  * they mean little before ~six weeks of data (spec §1.4).
  */
-export async function GET(request: Request) {
+async function getHandler(request: Request) {
   const params = new URL(request.url).searchParams;
   // Default to work-in-progress: `new` plus `clicked`, so a hook you opened but
   // haven't pasted back yet survives a refresh.
@@ -46,3 +47,5 @@ export async function GET(request: Request) {
 
   return NextResponse.json({ hooks });
 }
+
+export const GET = withConfig([requires.supabase], getHandler);

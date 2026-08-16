@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requires, withConfig } from "@/lib/api";
 import { db } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
  * GET /api/library?company=&tag=&block_type=
  * Saved pages, default sort stars desc then composite_score desc.
  */
-export async function GET(request: Request) {
+async function getHandler(request: Request) {
   const params = new URL(request.url).searchParams;
   const company = params.get("company");
   const tag = params.get("tag");
@@ -99,3 +100,5 @@ export async function GET(request: Request) {
     tags: (allTags ?? []).map((t) => t.label as string),
   });
 }
+
+export const GET = withConfig([requires.supabase], getHandler);

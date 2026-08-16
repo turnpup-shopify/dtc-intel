@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requires, withConfig } from "@/lib/api";
 import { cronRequestIsAuthorized } from "@/lib/auth";
 import { fetchAdsForPage } from "@/lib/meta";
 import { db } from "@/lib/supabase";
@@ -16,7 +17,7 @@ export const maxDuration = 300;
  * Zero results across every company is reported as an alert condition — a silent
  * scraper failure is indistinguishable from a quiet week.
  */
-export async function POST(request: Request) {
+async function postHandler(request: Request) {
   if (!cronRequestIsAuthorized(request)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
@@ -119,8 +120,6 @@ export async function POST(request: Request) {
   });
 }
 
-/** Vercel Cron issues GET by default; accept both. */
-export const GET = POST;
 
 function toIso(value: string | number | undefined): string | null {
   if (value == null) return null;
@@ -131,3 +130,7 @@ function toIso(value: string | number | undefined): string | null {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
+
+export const POST = withConfig([requires.supabase, requires.meta], postHandler);
+// Vercel Cron issues GET by default; accept both.
+export const GET = POST;

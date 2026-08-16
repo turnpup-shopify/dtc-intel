@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requires, withConfig } from "@/lib/api";
 import { cronRequestIsAuthorized } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { processUrl } from "@/lib/pipeline";
@@ -17,7 +18,7 @@ export const maxDuration = 300;
  * is left undiscovered and picked up next run, so a sitemap that suddenly grows
  * by 400 URLs can't dump 400 pages into the morning queue.
  */
-export async function POST(request: Request) {
+async function postHandler(request: Request) {
   if (!cronRequestIsAuthorized(request)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
@@ -109,7 +110,6 @@ export async function POST(request: Request) {
   });
 }
 
-export const GET = POST;
 
 /**
  * Which of these normalized URLs do we already have? Chunked, because a large
@@ -133,3 +133,7 @@ async function knownUrls(norms: string[]): Promise<Set<string>> {
 
   return known;
 }
+
+export const POST = withConfig([requires.supabase, requires.anthropic, requires.scraper], postHandler);
+// Vercel Cron issues GET by default; accept both.
+export const GET = POST;

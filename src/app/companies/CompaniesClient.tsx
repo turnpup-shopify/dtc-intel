@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import ErrorPanel from "@/components/ErrorPanel";
+import { errorMessage, getJson, postJson } from "@/lib/client";
 
 interface Company {
   id: string;
@@ -21,16 +23,24 @@ export default function CompaniesClient() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
+  /** Blocks the whole screen (load failed). */
   const [error, setError] = useState<string | null>(null);
+  /** Inline, non-blocking (a single save failed). */
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState({ name: "", domain: "", tier: "direct", category: "" });
 
   const load = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/companies");
-    const data = await res.json();
-    setCompanies(data.companies ?? []);
-    setLoading(false);
+    setError(null);
+    try {
+      const data = await getJson<{ companies: Company[] }>("/api/companies");
+      setCompanies(data.companies ?? []);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -41,18 +51,14 @@ export default function CompaniesClient() {
     const value = (drafts[company.id] ?? company.meta_page_id ?? "").trim();
     if (value === (company.meta_page_id ?? "")) return;
 
-    const res = await fetch(`/api/companies/${company.id}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ meta_page_id: value }),
-    });
-    const body = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      setError(body.error ?? "Save failed");
+    try {
+      await postJson(`/api/companies/${company.id}`, { meta_page_id: value });
+    } catch (err) {
+      setNotice(errorMessage(err));
       return;
     }
-    setError(null);
+
+    setNotice(null);
     setCompanies((prev) =>
       prev.map((c) => (c.id === company.id ? { ...c, meta_page_id: value || null } : c))
     );
@@ -63,21 +69,20 @@ export default function CompaniesClient() {
   async function addCompany(e: React.FormEvent) {
     e.preventDefault();
     if (!adding.name.trim()) return;
-    const res = await fetch("/api/companies", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(adding),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body.error ?? "Could not add brand");
+    try {
+      await postJson("/api/companies", adding);
+    } catch (err) {
+      setNotice(errorMessage(err));
       return;
     }
+    setNotice(null);
     setAdding({ name: "", domain: "", tier: "direct", category: "" });
     void load();
   }
 
   const mapped = companies.filter((c) => c.meta_page_id).length;
+
+  if (error) return <ErrorPanel error={error} onRetry={() => void load()} />;
 
   return (
     <div className="p-4">
@@ -87,9 +92,9 @@ export default function CompaniesClient() {
           {mapped}/{companies.length} have a page_id · grab it from the Ad Library URL parameter{" "}
           <code>view_all_page_id</code>
         </span>
-        {error && (
+        {notice && (
           <span className="text-xs" style={{ color: "var(--danger)" }}>
-            {error}
+            {notice}
           </span>
         )}
       </div>

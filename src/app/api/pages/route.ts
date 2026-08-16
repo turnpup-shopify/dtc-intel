@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
+import { requires, withConfig } from "@/lib/api";
 import { processUrl } from "@/lib/pipeline";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /** POST /api/pages { url } — enqueue a manual page and run the full pipeline. */
-export async function POST(request: Request) {
+async function postHandler(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
     url?: string;
     sourceRef?: string;
@@ -22,3 +23,5 @@ export async function POST(request: Request) {
 
   return NextResponse.json(result, { status: result.ok ? 200 : 422 });
 }
+
+export const POST = withConfig([requires.supabase, requires.anthropic, requires.scraper], postHandler);
