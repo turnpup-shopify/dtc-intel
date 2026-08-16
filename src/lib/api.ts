@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveSupabaseVar } from "./env";
 
 /**
  * Configuration preflight.
@@ -11,10 +12,15 @@ import { NextResponse } from "next/server";
 export const requires = {
   supabase(): string[] {
     const missing: string[] = [];
-    if (!process.env.SUPABASE_URL && !process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      missing.push("SUPABASE_URL");
+    for (const name of ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]) {
+      const { value, candidates } = resolveSupabaseVar(name);
+      if (value) continue;
+      missing.push(
+        candidates.length > 1
+          ? `${name} (ambiguous: ${candidates.join(" / ")} — set ${name} explicitly)`
+          : name
+      );
     }
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) missing.push("SUPABASE_SERVICE_ROLE_KEY");
     return missing;
   },
   anthropic(): string[] {
