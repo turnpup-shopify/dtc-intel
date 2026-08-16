@@ -27,7 +27,26 @@ Single-tenant. One ecommerce leader, plus a small marketing team later. No orgs,
 Create a project, then run the migration — either `supabase db push`, or paste
 `supabase/migrations/0001_init.sql` into the SQL editor. It creates the schema, the
 transactional `ingest_page_version` RPC, the `rebuild_ad_hooks` rollup, the
-`search_copy_blocks` search function, and the private `screenshots` bucket.
+`search_copy_blocks` search function, RLS deny-all on every table, and the private
+`screenshots` bucket. It is idempotent — safe to re-run.
+
+The SQL editor will warn that the query "includes destructive operations". That is a false
+positive: the only `update`/`delete` statements in the file are *inside* `create or replace
+function` bodies, where they are stored as text and not executed. There is no `drop` or
+`truncate` anywhere in the migration.
+
+### Security model
+
+Every table has RLS enabled with **no policies**, which denies everything. That is deliberate,
+not an oversight: the app holds exactly one Supabase client, it is server-side, and it uses the
+service-role key, which bypasses RLS. Supabase otherwise exposes every `public` table through
+PostgREST to anyone holding the anon key — and the anon key is public by design — so without
+this the archive would be world-readable and world-writable.
+
+There is intentionally no `NEXT_PUBLIC_SUPABASE_*` pair in `.env.example`. Anything
+`NEXT_PUBLIC_` is inlined into the browser bundle, and nothing in the app reads an anon key. If
+you add a browser-side Supabase client later, it will see nothing until you write explicit
+policies — that is the intended failure mode.
 
 ### 2. Seed the brand list
 

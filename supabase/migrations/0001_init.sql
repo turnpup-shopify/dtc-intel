@@ -141,6 +141,43 @@ create table if not exists page_tags (
 );
 
 -- ---------------------------------------------------------------------------
+-- Row Level Security — deny all, no policies.
+--
+-- Supabase exposes every `public` table through PostgREST to anyone holding the
+-- anon key, and the anon key is public by design. Without RLS this archive
+-- would be world-readable and world-writable.
+--
+-- This app never uses the anon key: there is exactly one Supabase client, it is
+-- server-side, and it holds the service-role key — which bypasses RLS entirely.
+-- So enabling RLS with NO policies is exactly right here: the app is unaffected
+-- and everyone else gets nothing.
+--
+-- If you ever add a browser-side Supabase client, it will read nothing until
+-- you write explicit policies. That is the intended failure mode.
+-- ---------------------------------------------------------------------------
+alter table companies     enable row level security;
+alter table ads           enable row level security;
+alter table ad_hooks      enable row level security;
+alter table pages         enable row level security;
+alter table page_versions enable row level security;
+alter table copy_blocks   enable row level security;
+alter table tags          enable row level security;
+alter table page_tags     enable row level security;
+
+-- Supabase's default privileges already cover new tables in `public`, but state
+-- it explicitly so the migration stands on its own: the app's role must keep
+-- full access, or every route fails with "permission denied".
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant usage on schema public to service_role;
+    grant all on all tables in schema public to service_role;
+    grant all on all sequences in schema public to service_role;
+    grant execute on all functions in schema public to service_role;
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- Private screenshot bucket. Read via signed URLs only.
 -- ---------------------------------------------------------------------------
 insert into storage.buckets (id, name, public)
