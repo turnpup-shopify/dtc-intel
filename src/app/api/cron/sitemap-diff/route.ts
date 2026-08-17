@@ -3,6 +3,7 @@ import { requires, withConfig } from "@/lib/api";
 import { cronRequestIsAuthorized } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { processUrl } from "@/lib/pipeline";
+import { withRunLog } from "@/lib/runlog";
 import { fetchSitemapPageUrls } from "@/lib/sitemap";
 import { db } from "@/lib/supabase";
 import { tryNormalizeUrl } from "@/lib/url";
@@ -23,6 +24,59 @@ async function postHandler(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  const result = await withRunLog("sitemap_diff", { trigger: "cron", classify: classifyDiff }, runDiff);
+  return NextResponse.json(result);
+}
+
+/**
+ * A sitemap sweep fails quietly in two directions: a domain whose sitemap
+ * 404s just reports zero URLs, and a capture that hits a bot wall just doesn't
+ * land in the queue. Both are counted here so they show up as a warning rather
+ * than as a suspiciously calm week.
+ */
+function classifyDiff(r: DiffResult) {
+  const brandsErrored = r.perCompany.filter((c) => c.error).length;
+  const brandsEmpty = r.perCompany.filter((c) => !c.error && c.found === 0).length;
+  const summary = {
+    brands: r.perCompany.length,
+    candidatesFound: r.candidatesFound,
+    newUrls: r.newUrls,
+    processed: r.processed,
+    queued: r.queued,
+    discarded: r.discarded,
+    failed: r.failed,
+    deferred: r.deferred,
+    brandsErrored,
+    brandsWithNoSitemap: brandsEmpty,
+  };
+
+  const notes: string[] = [];
+  if (brandsErrored) notes.push(`${brandsErrored} brand(s) errored fetching their sitemap`);
+  if (brandsEmpty) notes.push(`${brandsEmpty} brand(s) returned no /pages/ URLs at all`);
+  if (r.failed) notes.push(`${r.failed} page(s) failed to capture`);
+  if (r.deferred) notes.push(`${r.deferred} new URL(s) deferred past the daily cap`);
+
+  return notes.length
+    ? { status: "warning" as const, summary, warning: notes.join("; ") }
+    : { status: "ok" as const, summary };
+}
+
+interface DiffResult {
+  ok: boolean;
+  cap: number;
+  candidatesFound: number;
+  alreadyKnown: number;
+  newUrls: number;
+  processed: number;
+  deferred: number;
+  queued: number;
+  discarded: number;
+  failed: number;
+  perCompany: { company: string; found: number; fresh: number; error?: string }[];
+  results: unknown[];
+}
+
+async function runDiff(): Promise<DiffResult> {
   const cap = env.dailyPageCap;
 
   const { data: companies, error } = await db()
@@ -31,7 +85,7 @@ async function postHandler(request: Request) {
     .not("domain", "is", null)
     .eq("active", true);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) throw new Error(error.message);
 
   // Collect every sitemap candidate first, then ask the database which of THOSE
   // it already has. Loading the whole `pages` table instead would silently stop
@@ -94,7 +148,7 @@ async function postHandler(request: Request) {
     console.error(`[cron:sitemap-diff] ${failed.length} page(s) failed to capture`, failed);
   }
 
-  return NextResponse.json({
+  return {
     ok: true,
     cap,
     candidatesFound: candidates.length,
@@ -107,7 +161,7 @@ async function postHandler(request: Request) {
     failed: failed.length,
     perCompany,
     results: processed,
-  });
+  };
 }
 
 

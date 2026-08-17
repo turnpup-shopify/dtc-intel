@@ -1,4 +1,5 @@
 import { fetchAdsForPage } from "./meta";
+import { withRunLog } from "./runlog";
 import { db } from "./supabase";
 import { displayLinkTitle, normalizeLinkTitle } from "./text";
 
@@ -30,7 +31,42 @@ export interface PollResult {
  * and a link to the ad's snapshot page. Turning a hook into a page is the
  * human's click-through on /hooks.
  */
-export async function pollAdLibrary(): Promise<PollResult> {
+export async function pollAdLibrary(trigger: "manual" | "cron" = "manual"): Promise<PollResult> {
+  return withRunLog("ad_poll", { trigger, classify: classifyPoll }, runPoll);
+}
+
+/**
+ * A poll can finish cleanly and still be worthless. Zero ads across every
+ * seeded page is indistinguishable from a quiet week unless we say so out loud,
+ * and a partial failure is easy to miss when the response still says ok.
+ */
+function classifyPoll(result: PollResult) {
+  const failed = result.report.filter((r) => r.error).length;
+  const summary = {
+    companiesPolled: result.companiesPolled,
+    totalAds: result.totalAds,
+    hooksTouched: result.report.reduce((n, r) => n + r.hooksTouched, 0),
+    companiesFailed: failed,
+  };
+
+  if (failed > 0 && failed === result.companiesPolled) {
+    return { status: "error" as const, summary, warning: `Every brand failed to poll.` };
+  }
+  if (failed > 0) {
+    return {
+      status: "warning" as const,
+      summary,
+      warning: `${failed} of ${result.companiesPolled} brands failed: ${result.report
+        .filter((r) => r.error)
+        .map((r) => `${r.company} (${r.error})`)
+        .join("; ")}`,
+    };
+  }
+  if (result.alert) return { status: "warning" as const, summary, warning: result.alert };
+  return { status: "ok" as const, summary };
+}
+
+async function runPoll(): Promise<PollResult> {
   const startedAt = new Date().toISOString();
 
   const { data: companies, error } = await db()

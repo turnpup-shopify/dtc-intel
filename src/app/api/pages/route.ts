@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requires, withConfig } from "@/lib/api";
 import { processUrl } from "@/lib/pipeline";
+import { classifyCapture } from "@/lib/capture-log";
+import { withRunLog } from "@/lib/runlog";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -16,10 +18,11 @@ async function postHandler(request: Request) {
     return NextResponse.json({ error: "url is required" }, { status: 400 });
   }
 
-  const result = await processUrl(body.url, {
-    source: "manual",
-    sourceRef: body.sourceRef ?? null,
-  });
+  const result = await withRunLog(
+    "page_capture",
+    { subject: body.url, classify: classifyCapture },
+    () => processUrl(body.url as string, { source: "manual", sourceRef: body.sourceRef ?? null })
+  );
 
   return NextResponse.json(result, { status: result.ok ? 200 : 422 });
 }

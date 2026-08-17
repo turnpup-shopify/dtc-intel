@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
-import { harvestBrand } from "@/lib/adlibrary/harvest";
+import { harvestBrand, type HarvestReport } from "@/lib/adlibrary/harvest";
 import { requires, withConfig } from "@/lib/api";
+import { withRunLog } from "@/lib/runlog";
 import { db } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
+
+/** The harvest report plus what the registry merge did with it. */
+type HarvestOutcome = HarvestReport & {
+  inserted: number;
+  updated: number;
+  retired: number;
+};
 
 /**
  * POST /api/landing/harvest { companyId } — scrape one brand's Ad Library page
@@ -36,26 +44,49 @@ async function postHandler(request: Request) {
     );
   }
 
-  const report = await harvestBrand(company.meta_page_id as string);
+  const result = await withRunLog(
+    "lp_harvest",
+    {
+      companyId: company.id as string,
+      subject: company.name as string,
+      classify: (r: HarvestOutcome) => ({
+        // A stalled harvest still returns rows — that is exactly why it needs
+        // to be logged as a warning rather than a success.
+        status: r.completeness === "complete" ? ("ok" as const) : ("warning" as const),
+        warning: r.warning,
+        summary: {
+          adsHarvested: r.cardsHarvested,
+          metaEstimate: r.estimate,
+          uniquePages: r.rows.length,
+          adsWithoutLink: r.withoutDestination,
+          inserted: r.inserted,
+          updated: r.updated,
+          retired: r.retired,
+        },
+      }),
+    },
+    async (): Promise<HarvestOutcome> => {
+      const report = await harvestBrand(company.meta_page_id as string);
 
-  // Stage two. The rows are already collapsed one-per-landing-page by the
-  // harvester, so the RPC can increment runs_seen exactly once each.
-  const { data: merged, error: mergeError } = await db().rpc("merge_landing_pages", {
-    p_company_id: company.id,
-    p_rows: report.rows,
-  });
-  if (mergeError) throw new Error(mergeError.message);
+      // Stage two. The rows are already collapsed one-per-landing-page by the
+      // harvester, so the RPC can increment runs_seen exactly once each.
+      const { data: merged, error: mergeError } = await db().rpc("merge_landing_pages", {
+        p_company_id: company.id,
+        p_rows: report.rows,
+      });
+      if (mergeError) throw new Error(mergeError.message);
 
-  const counts = (Array.isArray(merged) ? merged[0] : merged) ?? {};
+      const counts = (Array.isArray(merged) ? merged[0] : merged) ?? {};
+      return {
+        ...report,
+        inserted: Number(counts.inserted) || 0,
+        updated: Number(counts.updated) || 0,
+        retired: Number(counts.retired) || 0,
+      };
+    }
+  );
 
-  return NextResponse.json({
-    ok: true,
-    company: company.name,
-    ...report,
-    inserted: Number(counts.inserted) || 0,
-    updated: Number(counts.updated) || 0,
-    retired: Number(counts.retired) || 0,
-  });
+  return NextResponse.json({ ok: true, company: company.name, ...result });
 }
 
 export const POST = withConfig([requires.supabase, requires.scraper], postHandler);

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requires, withConfig } from "@/lib/api";
+import { classifyCapture } from "@/lib/capture-log";
 import { processUrl } from "@/lib/pipeline";
+import { withRunLog } from "@/lib/runlog";
 import { db } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -30,11 +32,20 @@ async function postHandler(request: Request, ctx: { params: Promise<{ id: string
   if (!hook) return NextResponse.json({ error: "hook not found" }, { status: 404 });
 
   if (body.resulting_url) {
-    const result = await processUrl(body.resulting_url, {
-      source: "ad_hook",
-      sourceRef: id,
-      companyId: (hook.company_id as string) ?? null,
-    });
+    const result = await withRunLog(
+      "page_capture",
+      {
+        companyId: (hook.company_id as string) ?? null,
+        subject: body.resulting_url,
+        classify: classifyCapture,
+      },
+      () =>
+        processUrl(body.resulting_url as string, {
+          source: "ad_hook",
+          sourceRef: id,
+          companyId: (hook.company_id as string) ?? null,
+        })
+    );
 
     if (!result.ok) return NextResponse.json(result, { status: 422 });
 

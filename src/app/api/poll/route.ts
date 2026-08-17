@@ -14,7 +14,7 @@ export const maxDuration = 300;
  * not CRON_SECRET, because a browser doesn't have that.
  */
 async function postHandler() {
-  const result = await pollAdLibrary();
+  const result = await pollAdLibrary("manual");
   return NextResponse.json(result);
 }
 

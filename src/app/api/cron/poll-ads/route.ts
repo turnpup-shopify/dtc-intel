@@ -15,7 +15,7 @@ async function postHandler(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const result = await pollAdLibrary();
+  const result = await pollAdLibrary("cron");
   return NextResponse.json(result);
 }
 
