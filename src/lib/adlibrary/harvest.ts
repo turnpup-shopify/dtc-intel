@@ -2,6 +2,7 @@ import { scraper } from "../scrape";
 import { adLibraryPageUrl } from "../url";
 import { parseAdLibrary } from "./parse";
 import { collapse, isShort, reconcile, type Completeness, type HarvestRow } from "./aggregate";
+import { FAST_PASS, PATIENT_PASS } from "./profiles";
 
 export type { HarvestRow, Completeness };
 
@@ -13,15 +14,13 @@ export interface HarvestReport {
   completeness: Completeness;
   /** Human-readable reason when completeness isn't "complete". */
   warning: string | null;
-  scrollRounds: number;
+  /** Which scroll profile produced the result we kept. */
+  scrollProfile: string;
   withDestination: number;
   withoutDestination: number;
   rows: HarvestRow[];
 }
 
-const FIRST_PASS_ROUNDS = 25;
-const RETRY_ROUNDS = 60;
-const DELAY_MS = 1500;
 
 /**
  * Harvest one brand's Ad Library page into a deduped list of landing pages.
@@ -43,19 +42,18 @@ export async function harvestBrand(pageId: string): Promise<HarvestReport> {
 
   const url = adLibraryPageUrl(pageId);
 
-  let rounds = FIRST_PASS_ROUNDS;
-  let parsed = parseAdLibrary(
-    (await adapter.fetchScrolled(url, { rounds, delayMs: DELAY_MS })).html
-  );
+  let profile = FAST_PASS;
+  let parsed = parseAdLibrary((await adapter.fetchScrolled(url, profile)).html);
 
-  // One retry with a longer scroll budget when we came up short. Harvesting is
-  // keyed on Library ID, so re-reading the same ads costs nothing but time.
+  // Retry slower when we came up short. Harvesting is keyed on Library ID, so
+  // re-reading the same ads costs nothing but time, and we keep whichever pass
+  // saw more.
   if (isShort(parsed.cards.length, parsed.estimate)) {
-    rounds = RETRY_ROUNDS;
-    const retry = parseAdLibrary(
-      (await adapter.fetchScrolled(url, { rounds, delayMs: DELAY_MS })).html
-    );
-    if (retry.cards.length > parsed.cards.length) parsed = retry;
+    const retry = parseAdLibrary((await adapter.fetchScrolled(url, PATIENT_PASS)).html);
+    if (retry.cards.length > parsed.cards.length) {
+      parsed = retry;
+      profile = PATIENT_PASS;
+    }
   }
 
   const { completeness, warning } = reconcile(parsed.cards.length, parsed.estimate);
@@ -66,7 +64,7 @@ export async function harvestBrand(pageId: string): Promise<HarvestReport> {
     estimate: parsed.estimate,
     completeness,
     warning,
-    scrollRounds: rounds,
+    scrollProfile: `${profile.maxScrolls}x${profile.delayMs}ms`,
     withDestination: parsed.cards.filter((c) => c.destinationUrl).length,
     withoutDestination: parsed.cards.filter((c) => !c.destinationUrl).length,
     rows: collapse(parsed.cards),

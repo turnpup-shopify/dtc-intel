@@ -12,6 +12,13 @@
 import { parseAdLibrary, destinationFrom } from "../src/lib/adlibrary/parse";
 import { normalizeDestination, classify } from "../src/lib/adlibrary/normalize";
 import { collapse, reconcile } from "../src/lib/adlibrary/aggregate";
+import {
+  FAST_PASS,
+  PATIENT_PASS,
+  SCENARIO_CAP_MS,
+  fitsScenarioCap,
+  scenarioBudgetMs,
+} from "../src/lib/adlibrary/profiles";
 
 let passed = 0;
 const failures: string[] = [];
@@ -152,6 +159,20 @@ check("full harvest is complete", reconcile(113, 113).completeness, "complete");
 check("the stall case is caught", reconcile(80, 120).completeness, "short");
 check("slight overshoot still counts as complete", reconcile(115, 113).completeness, "complete");
 check("a missing estimate is never silently trusted", reconcile(80, null).completeness, "unverified");
+
+// ── Scroll budget ────────────────────────────────────────────────────────────
+// ScrapingBee kills a js_scenario at 40s. Exceeding it fails the whole call
+// rather than returning a partial page, so these are guards, not style checks.
+check("fast pass fits the provider's scenario cap", fitsScenarioCap(FAST_PASS), true);
+check("patient pass fits the provider's scenario cap", fitsScenarioCap(PATIENT_PASS), true);
+check("fast pass budget is under the hard cap", scenarioBudgetMs(FAST_PASS) < SCENARIO_CAP_MS, true);
+check(
+  "patient pass is slower per scroll, not merely longer",
+  PATIENT_PASS.delayMs > FAST_PASS.delayMs && PATIENT_PASS.maxScrolls < FAST_PASS.maxScrolls,
+  true
+);
+// The shape of the original bug: 60 scrolls at 1.5s was 93s against a 40s cap.
+check("the original over-budget profile is rejected", fitsScenarioCap({ maxScrolls: 60, delayMs: 1500 }), false);
 
 console.log(`\n  ${passed} passed, ${failures.length} failed\n`);
 for (const f of failures) console.log(`  ✗ ${f}\n`);

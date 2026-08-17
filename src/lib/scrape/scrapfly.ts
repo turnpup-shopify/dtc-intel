@@ -36,7 +36,7 @@ export class ScrapflyAdapter implements ScrapeAdapter {
       asp: "true",
       country: "us",
       auto_scroll: "true",
-      rendering_wait: String(Math.min(25_000, 4000 + opts.rounds * opts.delayMs)),
+      rendering_wait: String(Math.min(25_000, 3000 + opts.maxScrolls * opts.delayMs)),
     });
 
     const res = await fetch(`${BASE}?${qs}`, { signal: AbortSignal.timeout(240_000) });

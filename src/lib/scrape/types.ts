@@ -10,10 +10,16 @@ export interface ScrapeResult {
 }
 
 export interface ScrollOptions {
-  /** How many lazy-load rounds to drive before returning. */
-  rounds: number;
-  /** Pause between rounds, in ms, so the loader has time to append. */
+  /** Maximum scroll actions. Must fit the provider's scenario time budget. */
+  maxScrolls: number;
+  /** Pause between scrolls, in ms, so the loader has time to append. */
   delayMs: number;
+  /**
+   * Text of a "load more" control to click when the page bottom is reached.
+   * Off by default: a selector that matches nothing may fail the whole call,
+   * and an incomplete harvest is caught by reconciliation anyway.
+   */
+  endClickText?: string;
 }
 
 export interface ScrapeAdapter {
