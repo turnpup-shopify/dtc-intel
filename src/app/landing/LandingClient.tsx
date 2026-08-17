@@ -83,6 +83,8 @@ export default function LandingClient() {
   const [error, setError] = useState<string | null>(null);
   const [scan, setScan] = useState<ScanRow[]>([]);
   const [scanning, setScanning] = useState(false);
+  const [capturing, setCapturing] = useState<Set<string>>(new Set());
+  const [captured, setCaptured] = useState<Record<string, string>>({});
 
   const [brandFilter, setBrandFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -141,6 +143,51 @@ export default function LandingClient() {
     await load();
   }
 
+  /**
+   * Push landing pages into the review pipeline — the step paste-back used to
+   * do by hand. Batched at four because each page costs a scrape plus a scoring
+   * pass, and a serverless function will not sit through more than that.
+   */
+  async function capture(ids: string[]) {
+    const queue = ids.filter((id) => !capturing.has(id));
+    if (queue.length === 0) return;
+    setCapturing((prev) => new Set([...prev, ...queue]));
+
+    for (let i = 0; i < queue.length; i += 4) {
+      const batch = queue.slice(i, i + 4);
+      try {
+        const res = await postJson<{
+          results: { id: string; ok: boolean; status?: string; composite?: number; error?: string }[];
+        }>("/api/landing/capture", { ids: batch });
+
+        setCaptured((prev) => {
+          const next = { ...prev };
+          for (const r of res.results ?? []) {
+            next[r.id] = r.ok
+              ? r.status === "discarded"
+                ? `rejected ${r.composite?.toFixed(2) ?? ""}`
+                : `queued ${r.composite?.toFixed(2) ?? ""}`
+              : (r.error ?? "failed");
+          }
+          return next;
+        });
+      } catch (err) {
+        const message = errorMessage(err);
+        setCaptured((prev) => {
+          const next = { ...prev };
+          for (const id of batch) next[id] = message;
+          return next;
+        });
+      } finally {
+        setCapturing((prev) => {
+          const next = new Set(prev);
+          for (const id of batch) next.delete(id);
+          return next;
+        });
+      }
+    }
+  }
+
   const visible = pages.filter((p) => {
     if (brandFilter && p.company_id !== brandFilter) return false;
     if (typeFilter && p.page_type !== typeFilter) return false;
@@ -163,9 +210,18 @@ export default function LandingClient() {
           so <code>fbclid</code> can&apos;t split one page into hundreds.
         </span>
         <button
+          onClick={() => void capture(visible.filter((p) => p.ad_records_latest > 0).map((p) => p.id))}
+          disabled={capturing.size > 0 || visible.length === 0}
+          className="text-xs px-3 py-1.5 rounded ml-auto disabled:opacity-50 whitespace-nowrap"
+          style={{ background: "var(--panel-2)" }}
+          title="Scrape and score every listed page that is still running ads"
+        >
+          {capturing.size > 0 ? `Capturing ${capturing.size}…` : "Capture live pages"}
+        </button>
+        <button
           onClick={() => void scanAll(scannable)}
           disabled={scanning || scannable.length === 0}
-          className="text-xs px-3 py-1.5 rounded ml-auto disabled:opacity-50 whitespace-nowrap"
+          className="text-xs px-3 py-1.5 rounded disabled:opacity-50 whitespace-nowrap"
           style={{ background: "var(--accent)", color: "#08130e" }}
         >
           {scanning ? "Scanning…" : `Scan all ${scannable.length}`}
@@ -285,6 +341,7 @@ export default function LandingClient() {
                 <th className="px-3 py-2 font-normal text-right">Runs</th>
                 <th className="px-3 py-2 font-normal">Last seen</th>
                 <th className="px-3 py-2 font-normal">Ad</th>
+                <th className="px-3 py-2 font-normal">Archive</th>
               </tr>
             </thead>
             <tbody>
@@ -334,6 +391,28 @@ export default function LandingClient() {
                       </a>
                     ) : (
                       <span className="muted text-xs">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {captured[p.id] ? (
+                      <span
+                        className="text-xs"
+                        style={{
+                          color: /queued/.test(captured[p.id]) ? "var(--accent)" : "var(--muted)",
+                        }}
+                      >
+                        {captured[p.id]}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => void capture([p.id])}
+                        disabled={capturing.has(p.id)}
+                        className="text-xs px-2 py-1 rounded disabled:opacity-40"
+                        style={{ background: "var(--panel-2)" }}
+                        title="Scrape this page, score it, and put it in the review queue"
+                      >
+                        {capturing.has(p.id) ? "…" : "Capture"}
+                      </button>
                     )}
                   </td>
                 </tr>

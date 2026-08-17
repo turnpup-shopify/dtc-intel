@@ -145,7 +145,7 @@ async function runPoll(): Promise<PollResult> {
     (companies?.length ?? 0) === 0
       ? "No companies have a meta_page_id yet. Add one on /companies before polling."
       : totalAds === 0
-        ? "ZERO ADS RETURNED across every seeded page — check META_ACCESS_TOKEN and the Ad Library API before assuming a quiet week."
+        ? zeroAdsAlert(report)
         : null;
 
   if (alert) console.error(`[poll-ads] ${alert}`);
@@ -161,6 +161,35 @@ async function runPoll(): Promise<PollResult> {
     alert,
     report,
   };
+}
+
+/**
+ * Say which kind of nothing this was.
+ *
+ * "Check META_ACCESS_TOKEN" is actively misleading when the token is present
+ * and Meta is rejecting its TYPE. An app access token — the `{app-id}|{secret}`
+ * form — is well-formed but ads_archive refuses it, and the refusal it sends
+ * back ("Cannot parse access token") reads like a typo, sending you off to
+ * re-copy a credential that was never the problem.
+ */
+function zeroAdsAlert(report: PollReportRow[]): string {
+  const badToken = report.some((r) => /OAuth access token|parse access token|code 190/i.test(r.error ?? ""));
+
+  if (badToken) {
+    return (
+      "Meta rejected the credential on every page. The Ad Library API does not accept an app " +
+      "access token (META_APP_ID + META_APP_SECRET), only a User or System User token with " +
+      "ads_read — a System User token is the durable choice, since it does not expire. " +
+      "Note this blocks the hooks queue ONLY: the Landing Pages tab scrapes the public Ad " +
+      "Library and needs no Meta credential at all."
+    );
+  }
+
+  return (
+    "ZERO ADS RETURNED across every seeded page. The credential was accepted, so this is either " +
+    "a genuinely quiet week or the page_ids are wrong — check one brand on the Landing Pages tab, " +
+    "which reads the same advertisers without the API."
+  );
 }
 
 function toIso(value: string | number | undefined): string | null {
