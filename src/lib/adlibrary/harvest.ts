@@ -1,7 +1,7 @@
 import { fetchActiveAdCount } from "../meta";
 import { scraper } from "../scrape";
 import { adLibraryPageUrl } from "../url";
-import { diagnose, parseAdLibrary, type ParseDiagnostics } from "./parse";
+import { diagnose, parseAdLibrary, type AdCard, type ParseDiagnostics } from "./parse";
 import { collapse, isShort, reconcile, type Completeness, type HarvestRow } from "./aggregate";
 import { FAST_PASS, PATIENT_PASS } from "./profiles";
 
@@ -24,6 +24,8 @@ export interface HarvestReport {
   withDestination: number;
   withoutDestination: number;
   rows: HarvestRow[];
+  /** Raw cards, so one scrape can feed hooks as well as landing pages. */
+  cards: AdCard[];
   /** Attached only when a run failed or came up short. */
   diagnostics: ParseDiagnostics | null;
 }
@@ -97,6 +99,7 @@ export async function harvestBrand(pageId: string): Promise<HarvestReport> {
     withDestination: parsed.cards.filter((c) => c.destinationUrl).length,
     withoutDestination: parsed.cards.filter((c) => !c.destinationUrl).length,
     rows: collapse(parsed.cards),
+    cards: parsed.cards,
     // Only worth carrying when something went wrong; a healthy run doesn't need
     // its own autopsy attached.
     diagnostics: parsed.cards.length === 0 || completeness !== "complete" ? diagnose(html) : null,

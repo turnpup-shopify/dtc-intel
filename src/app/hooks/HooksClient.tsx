@@ -4,12 +4,20 @@ import { useCallback, useEffect, useState } from "react";
 import ErrorPanel from "@/components/ErrorPanel";
 import { errorMessage, getJson, postJson } from "@/lib/client";
 
-interface PollResult {
-  ok: boolean;
-  companiesPolled: number;
-  totalAds: number;
-  alert: string | null;
-  report: { company: string; adsSeen: number; hooksTouched: number; error?: string }[];
+interface Company {
+  id: string;
+  name: string;
+  meta_page_id: string | null;
+  active: boolean;
+}
+
+interface ScanRow {
+  company: string;
+  state: "queued" | "running" | "done" | "error";
+  adsSeen?: number;
+  headlines?: number;
+  hooksTouched?: number;
+  error?: string;
 }
 
 interface Hook {
@@ -38,7 +46,7 @@ export default function HooksClient() {
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [polling, setPolling] = useState(false);
-  const [pollReport, setPollReport] = useState<PollResult | null>(null);
+  const [scan, setScan] = useState<ScanRow[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,16 +71,62 @@ export default function HooksClient() {
   };
 
   /**
-   * Pull the latest ads now rather than waiting for the daily cron. The first
-   * run is the one that matters — an empty hooks queue is otherwise
-   * indistinguishable from a broken token.
+   * Fill the queue by SCRAPING the Ad Library, not by calling its API.
+   *
+   * The API route still exists and still works if you hold a User or System
+   * User token, but it refuses an app token outright, and it never had the
+   * destination URL anyway. The scrape carries the headline, the snapshot link
+   * and the ad id — everything the hook rollup reads — so this needs no Meta
+   * credential at all.
+   *
+   * One brand per request, looped here, because scrolling an advertiser to the
+   * bottom takes most of a minute and a single serverless call cannot hold the
+   * whole set.
    */
-  async function pollNow() {
+  async function scanAds() {
     setPolling(true);
-    setPollReport(null);
     try {
-      const result = await postJson<PollResult>("/api/poll", {});
-      setPollReport(result);
+      const { companies } = await getJson<{ companies: Company[] }>("/api/companies");
+      const targets = (companies ?? []).filter((c) => c.meta_page_id && c.active);
+
+      if (targets.length === 0) {
+        notify("No brand has a meta_page_id yet — add one on /companies.");
+        return;
+      }
+
+      setScan(targets.map((t) => ({ company: t.name, state: "queued" as const })));
+
+      for (let i = 0; i < targets.length; i++) {
+        setScan((prev) => prev.map((r, idx) => (idx === i ? { ...r, state: "running" } : r)));
+        try {
+          const res = await postJson<{
+            cardsHarvested: number;
+            headlinesFound: number;
+            hooksTouched: number;
+          }>("/api/landing/harvest", { companyId: targets[i].id });
+
+          setScan((prev) =>
+            prev.map((r, idx) =>
+              idx === i
+                ? {
+                    ...r,
+                    state: "done",
+                    adsSeen: res.cardsHarvested,
+                    headlines: res.headlinesFound,
+                    hooksTouched: res.hooksTouched,
+                  }
+                : r
+            )
+          );
+        } catch (err) {
+          setScan((prev) =>
+            prev.map((r, idx) =>
+              idx === i ? { ...r, state: "error", error: errorMessage(err) } : r
+            )
+          );
+        }
+      }
+
       await load();
     } catch (err) {
       notify(errorMessage(err));
@@ -142,59 +196,63 @@ export default function HooksClient() {
           </span>
         )}
         <button
-          onClick={() => void pollNow()}
+          onClick={() => void scanAds()}
           disabled={polling}
           className="text-xs px-3 py-1.5 rounded ml-auto disabled:opacity-50"
           style={{ background: "var(--panel-2)" }}
-          title="Fetch each seeded brand's live ads from the Meta Ad Library now"
+          title="Scrape each seeded brand's live ads from the public Ad Library. No Meta credential needed."
         >
-          {polling ? "Polling…" : "Poll now"}
+          {polling ? "Scanning…" : "Scan ads"}
         </button>
       </div>
 
-      {pollReport && (
+      {scan.length > 0 && (
         <div className="panel p-3 mb-3 text-xs">
           <div className="flex gap-4">
             <span>
-              <span className="muted">brands polled</span>{" "}
-              <span className="tabular-nums">{pollReport.companiesPolled}</span>
+              <span className="muted">ads seen</span>{" "}
+              <span className="tabular-nums">
+                {scan.reduce((n, r) => n + (r.adsSeen ?? 0), 0)}
+              </span>
             </span>
             <span>
-              <span className="muted">ads seen</span>{" "}
-              <span className="tabular-nums">{pollReport.totalAds}</span>
+              <span className="muted">hooks built</span>{" "}
+              <span className="tabular-nums">
+                {scan.reduce((n, r) => n + (r.hooksTouched ?? 0), 0)}
+              </span>
             </span>
-            <button
-              onClick={() => setPollReport(null)}
-              className="ml-auto muted hover:underline"
-            >
+            <button onClick={() => setScan([])} className="ml-auto muted hover:underline">
               dismiss
             </button>
           </div>
 
-          {pollReport.alert && (
-            <p className="mt-2" style={{ color: "var(--warn)" }}>
-              {pollReport.alert}
-            </p>
-          )}
-
-          {pollReport.report.length > 0 && (
-            <table className="mt-2 w-full">
-              <tbody>
-                {pollReport.report.map((r) => (
-                  <tr key={r.company}>
-                    <td className="py-0.5 pr-4">{r.company}</td>
-                    <td className="py-0.5 pr-4 tabular-nums muted">{r.adsSeen} ads</td>
-                    <td
-                      className="py-0.5"
-                      style={{ color: r.error ? "var(--danger)" : "var(--muted)" }}
-                    >
-                      {r.error ?? `${r.hooksTouched} hooks`}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          <table className="mt-2 w-full">
+            <tbody>
+              {scan.map((r) => (
+                <tr key={r.company}>
+                  <td className="py-0.5 pr-4">{r.company}</td>
+                  <td className="py-0.5 pr-4 tabular-nums muted">
+                    {r.state === "done" ? `${r.adsSeen} ads` : r.state === "running" ? "…" : ""}
+                  </td>
+                  <td
+                    className="py-0.5"
+                    style={{ color: r.error ? "var(--danger)" : "var(--muted)" }}
+                  >
+                    {r.error ??
+                      (r.state === "done"
+                        ? `${r.hooksTouched} hooks` +
+                          // A gap here means the headline sat somewhere the parser
+                          // couldn't isolate. Those ads still count as landing
+                          // pages; they just can't be ranked as hooks.
+                          (r.adsSeen && r.headlines !== undefined && r.headlines < r.adsSeen
+                            ? ` · ${r.adsSeen - r.headlines} ads had no readable headline`
+                            : "")
+                        : r.state)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -212,12 +270,17 @@ export default function HooksClient() {
               .
             </li>
             <li>
-              A poll has run — hit <strong>Poll now</strong> above, or wait for the daily cron.
+              A scan has run — hit <strong>Scan ads</strong> above. Scanning on{" "}
+              <a href="/landing" className="hover:underline" style={{ color: "var(--accent)" }}>
+                Landing Pages
+              </a>{" "}
+              fills this queue too; it is the same scrape.
             </li>
           </ol>
           <p className="mt-3">
-            Remember the Ad Library gives headlines, not landing page URLs. You click the
-            snapshot, land on the page, and paste its URL back here.
+            This reads the public Ad Library directly, so it needs no Meta credential. The
+            paste-back field below is now optional — the scrape usually reads the destination
+            URL straight off the ad, and those land on Landing Pages ready to capture.
           </p>
         </div>
       ) : (

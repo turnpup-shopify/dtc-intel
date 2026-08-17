@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { harvestBrand, type HarvestReport } from "@/lib/adlibrary/harvest";
+import { syncHooksFromCards } from "@/lib/adlibrary/hooks-sync";
 import { requires, withConfig } from "@/lib/api";
 import { withRunLog } from "@/lib/runlog";
 import { db } from "@/lib/supabase";
@@ -12,15 +13,16 @@ type HarvestOutcome = HarvestReport & {
   inserted: number;
   updated: number;
   retired: number;
+  hooksTouched: number;
+  headlinesFound: number;
 };
 
 /**
  * POST /api/landing/harvest { companyId } — scrape one brand's Ad Library page
  * and merge the landing pages it advertises into the registry.
  *
- * Note what this does NOT require: META_ACCESS_TOKEN. The Ad Library API has no
- * destination-URL field at all, which is why the hooks queue needs a human to
- * paste one back. The public web UI does expose it — every CTA is wrapped as
+ * Note what this does NOT require: a Meta credential. The Ad Library API has no
+ * destination-URL field at all, and refuses app tokens besides. The public web UI does expose it — every CTA is wrapped as
  * l.facebook.com/l.php?u=<destination> — so this path reads the landing page
  * straight out of the href. Different source, different capability.
  */
@@ -63,6 +65,8 @@ async function postHandler(request: Request) {
           inserted: r.inserted,
           updated: r.updated,
           retired: r.retired,
+          headlinesFound: r.headlinesFound,
+          hooksTouched: r.hooksTouched,
           // The autopsy, flattened so it reads in the run log without drilling.
           ...(r.diagnostics
             ? {
@@ -88,16 +92,33 @@ async function postHandler(request: Request) {
       if (mergeError) throw new Error(mergeError.message);
 
       const counts = (Array.isArray(merged) ? merged[0] : merged) ?? {};
+
+      // Same scrape, second output. The hooks queue used to need its own API
+      // call and a Meta token; the cards we already have carry the headline,
+      // the snapshot link and the ad id, which is everything the rollup reads.
+      // Never let a hooks failure discard a good landing page harvest.
+      let hooks = { hooksTouched: 0, withHeadline: 0 };
+      try {
+        hooks = await syncHooksFromCards(company.id as string, report.cards);
+      } catch (err) {
+        console.error("[harvest] hooks sync failed", err instanceof Error ? err.message : err);
+      }
+
       return {
         ...report,
         inserted: Number(counts.inserted) || 0,
         updated: Number(counts.updated) || 0,
         retired: Number(counts.retired) || 0,
+        hooksTouched: hooks.hooksTouched,
+        headlinesFound: hooks.withHeadline,
       };
     }
   );
 
-  return NextResponse.json({ ok: true, company: company.name, ...result });
+  // `cards` is the raw scrape payload — useful server-side, needless weight on
+  // the wire, and it would balloon a 17-brand scan in the browser.
+  const { cards: _cards, ...wire } = result;
+  return NextResponse.json({ ok: true, company: company.name, ...wire });
 }
 
 export const POST = withConfig([requires.supabase, requires.scraper], postHandler);

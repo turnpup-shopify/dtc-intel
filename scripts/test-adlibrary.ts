@@ -31,14 +31,23 @@ function check(name: string, actual: unknown, expected: unknown) {
 }
 
 /** Meta's real shape: obfuscated rotating class names, deep nesting, l.php CTA. */
-function card(libraryId: string, href: string | null, extra = "") {
-  const anchor = href ? `<a class="x1i10hfl xjbqb8w" href="${href}">Shop now</a>` : "";
+function card(libraryId: string, href: string | null, headline = "The Last Knives You'll Ever Buy") {
+  // Meta's real shape: body copy sits OUTSIDE the link anchor, while the
+  // anchor holds display domain, headline and button label together.
+  const anchor = href
+    ? `<a class="x1i10hfl xjbqb8w" href="${href}">
+         <div class="x1cy8zhl"><span>DRINKAG1.COM</span></div>
+         <div class="x1xmf6yo"><span>${headline}</span></div>
+         <div class="x1ja2u2z"><span>Shop Now</span></div>
+       </a>`
+    : "";
   return `
     <div class="x1lliihq xjkvuk6">
       <div class="x78zum5 xdt5ytf">
         <div class="_7jvw x2izyaf">
           <span class="x8t9es0">Library ID: ${libraryId}</span>
-          <div class="x1n2onr6">${anchor}${extra}</div>
+          <div class="x1rg5ohu">Our longest ad body copy, which is deliberately far longer than the headline so that any rule picking the biggest string across the whole card would grab this instead.</div>
+          <div class="x1n2onr6">${anchor}</div>
         </div>
       </div>
     </div>`;
@@ -194,6 +203,36 @@ check(
   "reads data-lynx-uri when href is a placeholder",
   lynx.cards[0].destinationUrl,
   "https://transparentlabs.com/pages/lp"
+);
+
+// ── Headline extraction ──────────────────────────────────────────────────────
+// The hooks queue ranks by headline, so a wrong string here corrupts the whole
+// ranking rather than failing visibly.
+check(
+  "pulls the headline out of the link preview",
+  parsed.cards.find((c) => c.libraryId === "1010101010101")!.headline,
+  "The Last Knives You'll Ever Buy"
+);
+check(
+  "does not mistake the longer body copy for the headline",
+  /longest ad body copy/.test(parsed.cards[0].headline ?? ""),
+  false
+);
+check(
+  "a card with no outbound link yields no headline",
+  parsed.cards.find((c) => c.libraryId === "5050505050505")!.headline,
+  null
+);
+
+const ctaOnly = parseAdLibrary(
+  `<html><body><div><span>Library ID: 7070707070707</span>
+     <a href="${wrap("https://x.com/p")}"><span>X.COM</span><span>Shop Now</span></a>
+   </div></body></html>`
+);
+check(
+  "domain and button label alone produce no headline",
+  ctaOnly.cards[0]?.headline ?? null,
+  null
 );
 
 // ── Within-run collapse (stage one of the merge) ─────────────────────────────

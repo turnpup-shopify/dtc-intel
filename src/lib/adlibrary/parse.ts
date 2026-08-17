@@ -19,9 +19,24 @@ export interface AdCard {
   libraryId: string;
   /** Advertiser destination, unwrapped from l.php. Null when a card has none. */
   destinationUrl: string | null;
+  /** The link-preview headline — the "hook". Null when it can't be isolated. */
+  headline: string | null;
   /** Permalink back to this ad in the Ad Library. */
   snapshotUrl: string;
 }
+
+/**
+ * Button labels Meta renders inside the link preview. They sit in the same
+ * block as the headline and would otherwise win on any "pick the text" rule.
+ */
+const CTA_LABELS = new Set(
+  [
+    "shop now", "learn more", "sign up", "get offer", "order now", "book now",
+    "download", "subscribe", "apply now", "contact us", "see more", "get quote",
+    "send message", "watch more", "play game", "install now", "buy now",
+    "start now", "try now", "get started", "sponsored", "open link",
+  ].map((s) => s)
+);
 
 export interface ParsedLibrary {
   cards: AdCard[];
@@ -78,6 +93,7 @@ function extractCards($: CheerioAPI): AdCard[] {
     cards.push({
       libraryId: id,
       destinationUrl: destinationForCard($, el),
+      headline: headlineForCard($, el),
       snapshotUrl: `https://www.facebook.com/ads/library/?id=${id}`,
     });
   }
@@ -114,18 +130,96 @@ function destinationForCard($: CheerioAPI, seed: ReturnType<CheerioAPI>[number])
 }
 
 /**
+ * The link-preview headline — what the hooks queue ranks.
+ *
+ * Scoped deliberately to the outbound anchor rather than the whole card. The
+ * card also holds the ad's body copy, which is usually LONGER than the
+ * headline, so any "take the biggest piece of text" rule applied card-wide
+ * reliably returns the wrong string. Inside the anchor there are only three
+ * things — the display domain, the headline, and the button label — and two of
+ * those are recognisable on sight.
+ *
+ * Returns null rather than guessing when there is no outbound anchor. A card
+ * with no link has no hook worth tracking, and rebuild_ad_hooks already skips
+ * rows with an empty title, so an honest null degrades cleanly.
+ */
+function headlineForCard($: CheerioAPI, seed: ReturnType<CheerioAPI>[number]): string | null {
+  const chain = [seed, ...$(seed).parents().toArray()];
+
+  for (const el of chain) {
+    if ((($(el).text().match(LIBRARY_ID_GLOBAL) ?? []).length) !== 1) break;
+
+    // "Anchor that yields a destination" — reusing the rule that already works,
+    // rather than a second definition that would drift from it. Note the
+    // redirector itself lives on a Meta host, so a naive is-it-Meta test here
+    // would reject the single most common case.
+    const blocks = $(el)
+      .find("a")
+      .toArray()
+      .filter((a) => destinationFrom(linkCandidates($, a)) !== null);
+
+    for (const block of blocks) {
+      const best = pickHeadline(textSegments($, block));
+      if (best) return best;
+    }
+  }
+
+  return null;
+}
+
+/** Own-text of every node in the subtree, so siblings stay separate strings. */
+function textSegments($: CheerioAPI, root: ReturnType<CheerioAPI>[number]): string[] {
+  const out: string[] = [];
+  const push = (raw: string) => {
+    const s = raw.replace(/\s+/g, " ").trim();
+    if (s) out.push(s);
+  };
+
+  push($(root).clone().children().remove().end().text());
+  for (const node of $(root).find("*").toArray()) {
+    push($(node).clone().children().remove().end().text());
+  }
+  return out;
+}
+
+function pickHeadline(segments: string[]): string | null {
+  const candidates = segments.filter((s) => {
+    if (s.length < 3 || s.length > 200) return false;
+    if (CTA_LABELS.has(s.toLowerCase())) return false;
+    if (/library id/i.test(s)) return false;
+    // The display domain: no spaces, at least one dot. Never the headline.
+    if (!/\s/.test(s) && /^[\w-]+(\.[\w-]+)+\.?$/.test(s)) return false;
+    if (/^https?:\/\//i.test(s)) return false;
+    return true;
+  });
+
+  if (candidates.length === 0) return null;
+  return candidates.reduce((a, b) => (b.length > a.length ? b : a));
+}
+
+/**
  * Every attribute Meta has used to carry an outbound URL. `href` is the usual
  * one, but ad CTAs frequently keep the real destination in `data-lynx-uri`
  * while the href is a placeholder, so both are collected.
  */
 function linkCandidates($: CheerioAPI, el: ReturnType<CheerioAPI>[number]): string[] {
   const out: string[] = [];
-  for (const a of $(el).find("a").toArray()) {
-    const lynx = $(a).attr("data-lynx-uri");
+
+  // Structural type rather than cheerio's generics: $(el) and $(anchor) resolve
+  // to different Cheerio<T> instantiations, and all we need from either is attr.
+  const collect = (node: { attr(name: string): string | undefined }) => {
+    const lynx = node.attr("data-lynx-uri");
     if (lynx) out.push(lynx);
-    const href = $(a).attr("href");
+    const href = node.attr("href");
     if (href) out.push(href);
-  }
+  };
+
+  // The element itself counts when it IS an anchor. Callers pass whole cards
+  // (links are descendants) and bare anchors (the link is the element), and a
+  // descendants-only search silently returns nothing for the second case.
+  if ($(el).is("a")) collect($(el));
+  for (const a of $(el).find("a").toArray()) collect($(a));
+
   return out;
 }
 
