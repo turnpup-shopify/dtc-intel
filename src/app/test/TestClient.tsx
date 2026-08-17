@@ -35,11 +35,33 @@ interface TestResult {
  * the evidence instead of a verdict: what came back, how the links are encoded,
  * and the DOM around a real ad card.
  */
+interface TokenCheck {
+  ok: boolean;
+  source: string;
+  verdict: string;
+  detail?: string;
+  hint?: string;
+}
+
 export default function TestClient() {
   const [url, setUrl] = useState(DEFAULT_URL);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [token, setToken] = useState<TokenCheck | null>(null);
+  const [checkingToken, setCheckingToken] = useState(false);
+
+  async function checkToken() {
+    setCheckingToken(true);
+    setToken(null);
+    try {
+      setToken(await postJson<TokenCheck>("/api/test/meta-token", {}));
+    } catch (err) {
+      setToken({ ok: false, source: "unknown", verdict: errorMessage(err) });
+    } finally {
+      setCheckingToken(false);
+    }
+  }
 
   async function run() {
     setRunning(true);
@@ -62,6 +84,38 @@ export default function TestClient() {
           One advertiser, nothing written to the database. Shows what actually came back.
         </span>
       </div>
+
+      <section className="panel p-3">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => void checkToken()}
+            disabled={checkingToken}
+            className="text-xs px-3 py-1.5 rounded disabled:opacity-50 whitespace-nowrap"
+            style={{ background: "var(--panel-2)" }}
+          >
+            {checkingToken ? "Asking Meta…" : "Check Meta credential"}
+          </button>
+          <span className="muted text-xs">
+            Free. One tiny API call, no scrape credits. Works with either
+            META_ACCESS_TOKEN or META_APP_ID + META_APP_SECRET.
+          </span>
+        </div>
+
+        {token && (
+          <div className="mt-3 text-xs space-y-1">
+            <div style={{ color: token.ok ? "var(--accent)" : "var(--danger)" }}>
+              {token.verdict}
+            </div>
+            <div className="muted font-mono">using: {token.source}</div>
+            {token.detail && (
+              <div className="font-mono" style={{ color: "var(--warn)" }}>
+                Meta said: {token.detail}
+              </div>
+            )}
+            {token.hint && <div className="muted">{token.hint}</div>}
+          </div>
+        )}
+      </section>
 
       <div className="panel p-3 space-y-2">
         <label className="muted text-xs block">Ad Library URL</label>
