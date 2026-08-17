@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ErrorPanel from "@/components/ErrorPanel";
+import WhyEmpty from "@/components/WhyEmpty";
 import { errorMessage, getJson, postJson } from "@/lib/client";
 
 interface ReviewItem {
@@ -290,10 +291,7 @@ export default function ReviewClient() {
         <p className="muted p-6 text-sm">Loading queue…</p>
       ) : !current ? (
         <div className="p-8">
-          <p className="text-sm">Queue empty.</p>
-          <p className="muted text-sm mt-1">
-            Paste a URL above, work the hooks queue, or wait for the weekly sitemap diff.
-          </p>
+          <WhyEmpty screen="review" />
         </div>
       ) : (
         <div className="flex flex-1 min-h-0">

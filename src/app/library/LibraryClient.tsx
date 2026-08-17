@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import ErrorPanel from "@/components/ErrorPanel";
+import WhyEmpty from "@/components/WhyEmpty";
 import { errorMessage, getJson } from "@/lib/client";
 
 interface LibraryPage {
@@ -117,7 +118,7 @@ export default function LibraryClient() {
       {loading ? (
         <p className="muted text-sm">Loading…</p>
       ) : pages.length === 0 ? (
-        <p className="muted text-sm">Nothing saved yet.</p>
+        <WhyEmpty screen="library" />
       ) : (
         <div className="grid gap-2">
           {pages.map((page) => (
