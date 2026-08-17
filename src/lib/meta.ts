@@ -73,6 +73,64 @@ export async function fetchAdsForPage(
   return ads;
 }
 
+/**
+ * How many active US ads this page is running, straight from the API.
+ *
+ * This exists to check the web harvester's work. Scraping the "~N results"
+ * string off the page was always the weak link: it is UI text, it moves, and
+ * when it moves the harvester loses its only way to know it came up short —
+ * which is the exact failure it is supposed to catch.
+ *
+ * Asks for `id` only. We want the count, not the payload.
+ *
+ * Returns null when no token is configured, so the caller can fall back to the
+ * scraped figure rather than treating "no token" as "no ads".
+ */
+export async function fetchActiveAdCount(
+  metaPageId: string
+): Promise<{ count: number; capped: boolean } | null> {
+  if (!env.metaToken) return null;
+
+  const MAX_PAGES = 10;
+  const PER_PAGE = 100;
+  let count = 0;
+
+  let url: string | null = buildUrl({
+    access_token: env.metaToken,
+    ad_type: "ALL",
+    ad_reached_countries: JSON.stringify(["US"]),
+    ad_active_status: "ACTIVE",
+    search_page_ids: JSON.stringify([metaPageId]),
+    fields: "id",
+    limit: String(PER_PAGE),
+  });
+
+  let pagesRead = 0;
+  for (; pagesRead < MAX_PAGES && url; pagesRead++) {
+    const res: Response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+    const json = (await res.json()) as {
+      data?: { id: string }[];
+      paging?: { next?: string };
+      error?: { message?: string };
+    };
+
+    if (!res.ok || json.error) {
+      throw new Error(
+        `Ad count request failed for page_id ${metaPageId}: ${
+          json.error?.message ?? `HTTP ${res.status}`
+        }`
+      );
+    }
+
+    count += json.data?.length ?? 0;
+    url = json.paging?.next ?? null;
+  }
+
+  // Hit the page ceiling with more to read: the true total is higher than this,
+  // so it must not be used as a target the harvest is measured against.
+  return { count, capped: Boolean(url) };
+}
+
 function buildUrl(params: Record<string, string>): string {
   const qs = new URLSearchParams(params);
   return `https://graph.facebook.com/${GRAPH_VERSION}/ads_archive?${qs}`;

@@ -138,14 +138,58 @@ function safeUrl(raw: string): URL | null {
 }
 
 /**
- * Meta prints its own result count ("~113 results"). We do not compute this
- * ourselves — the whole point is to have an independent number to check the
- * harvest against.
+ * Meta prints its own result count near the top of the page.
+ *
+ * The wording moves around ("~113 results", "About 113 results", "113 ads"),
+ * the tilde is sometimes a different character, and the space before the noun
+ * is sometimes non-breaking. So this is written loosely on purpose — and it is
+ * now only a FALLBACK. The trustworthy count comes from the API; see
+ * fetchActiveAdCount.
  */
 function extractEstimate($: CheerioAPI): number | null {
-  const text = $("body").text();
-  const match = text.match(/~?\s*([\d,]+)\s*\+?\s+results?\b/i);
+  // Normalise the exotic whitespace and tildes Meta's UI uses before matching.
+  const text = $("body")
+    .text()
+    .replace(/[   ]/g, " ")
+    .replace(/[~∼˜]/g, "~");
+
+  const match = text.match(/(?:~|about\s+)?\s*([\d][\d.,\s]{0,12}?)\s*\+?\s+(?:results?|ads)\b/i);
   if (!match) return null;
-  const n = Number(match[1].replace(/,/g, ""));
-  return Number.isFinite(n) ? n : null;
+
+  const n = Number(match[1].replace(/[.,\s]/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * What did we actually get back?
+ *
+ * When a harvest returns nothing, the two candidate explanations look identical
+ * from the outside: the parser stopped matching Meta's markup, or the scrape
+ * never reached the real page at all (login wall, consent gate, block page).
+ * These markers separate them without dumping a multi-megabyte page into the
+ * log, and without storing anything that isn't Meta's own chrome.
+ */
+export interface ParseDiagnostics {
+  htmlBytes: number;
+  /** Did the string every ad card carries appear anywhere? */
+  sawLibraryIdMarker: boolean;
+  /** Did any count-like text appear, even if unparsed? */
+  sawResultsText: boolean;
+  /** Meta's outbound redirect wrapper. Zero here means no CTAs were rendered. */
+  redirectorLinks: number;
+  /** Opening body text — enough to recognise a login or consent page on sight. */
+  bodyTextSample: string;
+}
+
+export function diagnose(html: string): ParseDiagnostics {
+  const $ = load(html);
+  const text = $("body").text().replace(/\s+/g, " ").trim();
+
+  return {
+    htmlBytes: html.length,
+    sawLibraryIdMarker: /Library ID/i.test(html),
+    sawResultsText: /\b(results?|ads)\b/i.test(text.slice(0, 4000)),
+    redirectorLinks: (html.match(/l\.php\?u=/g) ?? []).length,
+    bodyTextSample: text.slice(0, 300),
+  };
 }

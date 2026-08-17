@@ -31,6 +31,7 @@ interface HarvestResponse {
   adLibraryUrl: string;
   cardsHarvested: number;
   estimate: number | null;
+  estimateSource: "api" | "page" | "none";
   completeness: "complete" | "short" | "unverified";
   warning: string | null;
   withDestination: number;
@@ -39,6 +40,13 @@ interface HarvestResponse {
   updated: number;
   retired: number;
   rows: { key: string }[];
+  diagnostics: {
+    htmlBytes: number;
+    sawLibraryIdMarker: boolean;
+    sawResultsText: boolean;
+    redirectorLinks: number;
+    bodyTextSample: string;
+  } | null;
 }
 
 interface ScanRow {
@@ -199,6 +207,11 @@ export default function LandingClient() {
                   </td>
                   <td className="py-1" style={{ color: stateColor(r) }}>
                     {stateLabel(r)}
+                    {r.result?.diagnostics && (
+                      <div className="mt-1 font-mono muted" style={{ fontSize: 11 }}>
+                        {explainDiagnostics(r.result.diagnostics)}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -332,13 +345,39 @@ export default function LandingClient() {
   );
 }
 
+/**
+ * Turn the raw markers into the actual diagnosis.
+ *
+ * "Unverified" and "zero pages" have two very different causes that look
+ * identical from outside: the parser stopped matching Meta's markup, or the
+ * scrape never reached the real page. These markers tell them apart, so say
+ * which one it is rather than printing booleans at someone.
+ */
+function explainDiagnostics(d: NonNullable<HarvestResponse["diagnostics"]>): string {
+  if (d.htmlBytes < 20_000) {
+    return `Only ${d.htmlBytes} bytes came back — that is not the Ad Library. Page began: "${d.bodyTextSample.slice(0, 120)}"`;
+  }
+  if (!d.sawLibraryIdMarker) {
+    return `Full page received (${Math.round(d.htmlBytes / 1024)}kb) but no "Library ID" anywhere — either a block/consent page, or Meta renamed the marker. Page began: "${d.bodyTextSample.slice(0, 120)}"`;
+  }
+  if (d.redirectorLinks === 0) {
+    return `Cards present but zero outbound l.php links — CTAs did not render. Try a longer initial wait.`;
+  }
+  return `${Math.round(d.htmlBytes / 1024)}kb, ${d.redirectorLinks} outbound links found${
+    d.sawResultsText ? "" : ", no count text on page"
+  }.`;
+}
+
 function stateLabel(r: ScanRow): string {
   if (r.status === "pending") return "queued";
   if (r.status === "running") return "scanning…";
   if (r.status === "error") return r.error ?? "failed";
   if (!r.result) return "done";
   if (r.result.completeness === "short") return "SHORT — loader stalled";
-  if (r.result.completeness === "unverified") return "unverified — no count shown";
+  if (r.result.completeness === "unverified")
+    return r.result.estimateSource === "none"
+      ? "unverified — nothing to check against (set META_ACCESS_TOKEN)"
+      : "unverified — no count available";
   return `complete · ${r.result.withoutDestination} ads had no link`;
 }
 

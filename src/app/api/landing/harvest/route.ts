@@ -56,12 +56,23 @@ async function postHandler(request: Request) {
         warning: r.warning,
         summary: {
           adsHarvested: r.cardsHarvested,
-          metaEstimate: r.estimate,
+          expectedAds: r.estimate,
+          expectedFrom: r.estimateSource,
           uniquePages: r.rows.length,
           adsWithoutLink: r.withoutDestination,
           inserted: r.inserted,
           updated: r.updated,
           retired: r.retired,
+          // The autopsy, flattened so it reads in the run log without drilling.
+          ...(r.diagnostics
+            ? {
+                htmlBytes: r.diagnostics.htmlBytes,
+                sawLibraryIdMarker: r.diagnostics.sawLibraryIdMarker,
+                sawResultsText: r.diagnostics.sawResultsText,
+                redirectorLinks: r.diagnostics.redirectorLinks,
+                pageStartedWith: r.diagnostics.bodyTextSample,
+              }
+            : {}),
         },
       }),
     },
