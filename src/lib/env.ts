@@ -83,8 +83,35 @@ export const env = {
   get anthropicModel() {
     return process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
   },
+  /**
+   * Token for the Ad Library API.
+   *
+   * Accepts either a token directly, or an app id + secret — Meta's app access
+   * token is literally "{app-id}|{app-secret}", so a reports app's credentials
+   * can be used without minting anything by hand. Whether Meta ACCEPTS an app
+   * token for ads_archive is a separate question from whether we can build one;
+   * if it refuses, the harvest surfaces Meta's own error rather than guessing.
+   *
+   * Returns "" rather than throwing so callers can distinguish "not configured"
+   * from "configured and rejected".
+   */
   get metaToken() {
-    return req("META_ACCESS_TOKEN");
+    const direct = process.env.META_ACCESS_TOKEN?.trim();
+    if (direct) return direct;
+
+    const appId = process.env.META_APP_ID?.trim();
+    const appSecret = process.env.META_APP_SECRET?.trim();
+    if (appId && appSecret) return `${appId}|${appSecret}`;
+
+    return "";
+  },
+  /** Which credential the Ad Library call is using, for the health panel. */
+  get metaTokenSource() {
+    if (process.env.META_ACCESS_TOKEN?.trim()) return "META_ACCESS_TOKEN";
+    if (process.env.META_APP_ID?.trim() && process.env.META_APP_SECRET?.trim()) {
+      return "META_APP_ID + META_APP_SECRET (app token)";
+    }
+    return "(unset)";
   },
   get scraperProvider() {
     return process.env.SCRAPER_PROVIDER || "fetch";

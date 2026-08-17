@@ -144,6 +144,58 @@ check("reads Meta's own result estimate", parsed.estimate, 7);
 check("builds a snapshot permalink", parsed.cards[0].snapshotUrl, "https://www.facebook.com/ads/library/?id=1010101010101");
 check("a card with no outbound link yields null", parsed.cards.find((c) => c.libraryId === "5050505050505")!.destinationUrl, null);
 
+// ── Card boundary: the marker and the CTA in different subtrees ──────────────
+// The failure this guards against: Meta puts "Library ID" in a metadata block
+// and the call-to-action in a SIBLING block. Anchoring on the marker alone
+// finds the ad but sees no links, and every ad reports "no destination".
+const siblingLayout = `<html><body><div class="feed">
+  <div class="card">
+    <div class="meta"><span>Library ID: 7070707070707</span></div>
+    <div class="creative"><div class="cta">
+      <a href="${wrap("https://transparentlabs.com/pages/bulk")}">Shop now</a>
+    </div></div>
+  </div>
+  <div class="card">
+    <div class="meta"><span>Library ID: 8080808080808</span></div>
+    <div class="creative"><div class="cta">
+      <a href="${wrap("https://transparentlabs.com/products/whey")}">Shop now</a>
+    </div></div>
+  </div>
+</div></body></html>`;
+
+const sibling = parseAdLibrary(siblingLayout);
+check("finds both cards when the CTA is in a sibling subtree", sibling.cards.length, 2);
+check(
+  "widens past the marker block to reach the CTA",
+  sibling.cards.map((c) => c.destinationUrl),
+  ["https://transparentlabs.com/pages/bulk", "https://transparentlabs.com/products/whey"]
+);
+
+// The boundary must never widen so far it grabs the neighbour's link.
+const orphan = parseAdLibrary(`<html><body><div class="feed">
+  <div class="card"><div class="meta"><span>Library ID: 9090909090909</span></div></div>
+  <div class="card">
+    <div class="meta"><span>Library ID: 1212121212121</span></div>
+    <a href="${wrap("https://example.com/theirs")}">Shop now</a>
+  </div>
+</div></body></html>`);
+check(
+  "never attributes a neighbouring ad's link to a linkless card",
+  orphan.cards.find((c) => c.libraryId === "9090909090909")!.destinationUrl,
+  null
+);
+
+// data-lynx-uri carries the real destination when href is a placeholder.
+const lynx = parseAdLibrary(`<html><body><div class="card">
+  <span>Library ID: 1313131313131</span>
+  <a href="#" data-lynx-uri="${wrap("https://transparentlabs.com/pages/lp")}">Shop now</a>
+</div></body></html>`);
+check(
+  "reads data-lynx-uri when href is a placeholder",
+  lynx.cards[0].destinationUrl,
+  "https://transparentlabs.com/pages/lp"
+);
+
 // ── Within-run collapse (stage one of the merge) ─────────────────────────────
 const rows = collapse(parsed.cards);
 check("collapses 6 ads into 3 unique landing pages", rows.length, 3);

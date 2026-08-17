@@ -32,6 +32,7 @@ interface HarvestResponse {
   cardsHarvested: number;
   estimate: number | null;
   estimateSource: "api" | "page" | "none";
+  countError: string | null;
   completeness: "complete" | "short" | "unverified";
   warning: string | null;
   withDestination: number;
@@ -375,9 +376,11 @@ function stateLabel(r: ScanRow): string {
   if (!r.result) return "done";
   if (r.result.completeness === "short") return "SHORT — loader stalled";
   if (r.result.completeness === "unverified")
-    return r.result.estimateSource === "none"
-      ? "unverified — nothing to check against (set META_ACCESS_TOKEN)"
-      : "unverified — no count available";
+    return r.result.countError
+      ? `unverified — the Ad Library API refused the count: ${r.result.countError}`
+      : r.result.estimateSource === "none"
+        ? "unverified — no META_ACCESS_TOKEN set, and no count on the page"
+        : "unverified — no count available";
   return `complete · ${r.result.withoutDestination} ads had no link`;
 }
 

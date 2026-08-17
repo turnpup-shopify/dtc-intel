@@ -75,20 +75,58 @@ function extractCards($: CheerioAPI): AdCard[] {
     if (!id || seen.has(id)) continue;
     seen.add(id);
 
-    const hrefs = $(el)
-      .find("a[href]")
-      .toArray()
-      .map((a) => $(a).attr("href"))
-      .filter((h): h is string => Boolean(h));
-
     cards.push({
       libraryId: id,
-      destinationUrl: destinationFrom(hrefs),
+      destinationUrl: destinationForCard($, el),
       snapshotUrl: `https://www.facebook.com/ads/library/?id=${id}`,
     });
   }
 
   return cards;
+}
+
+/**
+ * Find this ad's destination, widening the card boundary until it appears.
+ *
+ * The innermost div holding "Library ID" is a reliable way to FIND an ad, but a
+ * bad guess at where the ad ENDS. Meta often puts the id in a small metadata
+ * block while the call-to-action lives in a sibling subtree, so a parser
+ * anchored on the marker alone sees a card with no links at all and reports
+ * every ad as having no destination.
+ *
+ * So: walk outward from the marker, stopping the moment an ancestor would
+ * swallow a second "Library ID" — that is the neighbouring ad, and crossing
+ * into it would attribute someone else's landing page to this one. The first
+ * boundary in that safe range that yields a destination wins.
+ */
+function destinationForCard($: CheerioAPI, seed: ReturnType<CheerioAPI>[number]): string | null {
+  const chain = [seed, ...$(seed).parents().toArray()];
+
+  for (const el of chain) {
+    // Past this point the element covers more than one ad. Stop widening.
+    if ((($(el).text().match(LIBRARY_ID_GLOBAL) ?? []).length) !== 1) break;
+
+    const destination = destinationFrom(linkCandidates($, el));
+    if (destination) return destination;
+  }
+
+  return null;
+}
+
+/**
+ * Every attribute Meta has used to carry an outbound URL. `href` is the usual
+ * one, but ad CTAs frequently keep the real destination in `data-lynx-uri`
+ * while the href is a placeholder, so both are collected.
+ */
+function linkCandidates($: CheerioAPI, el: ReturnType<CheerioAPI>[number]): string[] {
+  const out: string[] = [];
+  for (const a of $(el).find("a").toArray()) {
+    const lynx = $(a).attr("data-lynx-uri");
+    if (lynx) out.push(lynx);
+    const href = $(a).attr("href");
+    if (href) out.push(href);
+  }
+  return out;
 }
 
 /**

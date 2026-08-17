@@ -14,6 +14,8 @@ export interface HarvestReport {
   estimate: number | null;
   /** Where that number came from. "none" means nothing checked this run. */
   estimateSource: "api" | "page" | "none";
+  /** Set when the API was asked for a count and refused. Distinct from no token. */
+  countError: string | null;
   completeness: Completeness;
   /** Human-readable reason when completeness isn't "complete". */
   warning: string | null;
@@ -50,10 +52,17 @@ export async function harvestBrand(pageId: string): Promise<HarvestReport> {
   // Ask the API how many ads there SHOULD be, before scraping. It's structured,
   // it doesn't move when Meta restyles the page, and a failure here must not
   // sink the harvest — an unverified result still beats no result.
-  const apiCount = await fetchActiveAdCount(pageId).catch((err) => {
-    console.error("[harvest] API count unavailable", err instanceof Error ? err.message : err);
-    return null;
-  });
+  let apiCount: { count: number; capped: boolean } | null = null;
+  let countError: string | null = null;
+  try {
+    apiCount = await fetchActiveAdCount(pageId);
+  } catch (err) {
+    // A rejected token and an absent one produced the same message before, and
+    // they need opposite fixes: one is "go add the variable", the other is "the
+    // variable you added doesn't work". Keep them apart.
+    countError = err instanceof Error ? err.message : String(err);
+    console.error("[harvest] API count unavailable:", countError);
+  }
 
   let profile = FAST_PASS;
   let html = (await adapter.fetchScrolled(url, profile)).html;
@@ -81,6 +90,7 @@ export async function harvestBrand(pageId: string): Promise<HarvestReport> {
     cardsHarvested: parsed.cards.length,
     estimate: target,
     estimateSource: apiCount && !apiCount.capped ? "api" : parsed.estimate !== null ? "page" : "none",
+    countError,
     completeness,
     warning,
     scrollProfile: `${profile.maxScrolls}x${profile.delayMs}ms`,

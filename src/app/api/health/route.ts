@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requires } from "@/lib/api";
-import { resolveSupabaseVar } from "@/lib/env";
+import { env, resolveSupabaseVar } from "@/lib/env";
 import { db } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -36,6 +36,7 @@ export async function GET() {
       anthropic:
         missing.anthropic.length === 0 ? "ok" : `missing ${missing.anthropic.join(", ")}`,
       meta: missing.meta.length === 0 ? "ok" : `missing ${missing.meta.join(", ")}`,
+      metaTokenFrom: env.metaTokenSource,
       scraper:
         missing.scraper.length === 0
           ? `ok (${process.env.SCRAPER_PROVIDER || "fetch"})`

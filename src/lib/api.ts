@@ -27,7 +27,11 @@ export const requires = {
     return process.env.ANTHROPIC_API_KEY ? [] : ["ANTHROPIC_API_KEY"];
   },
   meta(): string[] {
-    return process.env.META_ACCESS_TOKEN ? [] : ["META_ACCESS_TOKEN"];
+    if (process.env.META_ACCESS_TOKEN?.trim()) return [];
+    // An app id + secret forms a valid app access token, so either shape counts
+    // as configured. Whether Meta honours it is answered at call time.
+    if (process.env.META_APP_ID?.trim() && process.env.META_APP_SECRET?.trim()) return [];
+    return ["META_ACCESS_TOKEN (or META_APP_ID + META_APP_SECRET)"];
   },
   scraper(): string[] {
     const provider = (process.env.SCRAPER_PROVIDER || "fetch").toLowerCase();
