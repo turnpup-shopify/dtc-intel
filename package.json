@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "seed": "node --env-file=.env.local scripts/seed.mjs"
+    "seed": "node --env-file=.env.local scripts/seed.mjs",
+    "test:adlibrary": "tsc src/lib/adlibrary/*.ts scripts/test-adlibrary.ts --outDir .tmp-adlib-test --module commonjs --moduleResolution node --target es2022 --esModuleInterop --skipLibCheck && node .tmp-adlib-test/scripts/test-adlibrary.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.117.1",

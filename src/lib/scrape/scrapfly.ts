@@ -1,4 +1,9 @@
-import { ScrapeError, type ScrapeAdapter, type ScrapeResult } from "./types";
+import {
+  ScrapeError,
+  type ScrapeAdapter,
+  type ScrapeResult,
+  type ScrollOptions,
+} from "./types";
 
 const BASE = "https://api.scrapfly.io/scrape";
 
@@ -20,6 +25,37 @@ export class ScrapflyAdapter implements ScrapeAdapter {
 
   constructor(private readonly apiKey: string) {
     if (!apiKey) throw new Error("SCRAPER_API_KEY is required for SCRAPER_PROVIDER=scrapfly");
+  }
+
+  /** Scrapfly drives lazy lists with auto_scroll; see the ScrapingBee note on reconciliation. */
+  async fetchScrolled(url: string, opts: ScrollOptions): Promise<ScrapeResult> {
+    const qs = new URLSearchParams({
+      key: this.apiKey,
+      url,
+      render_js: "true",
+      asp: "true",
+      country: "us",
+      auto_scroll: "true",
+      rendering_wait: String(Math.min(25_000, 4000 + opts.rounds * opts.delayMs)),
+    });
+
+    const res = await fetch(`${BASE}?${qs}`, { signal: AbortSignal.timeout(240_000) });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new ScrapeError(
+        `Scrapfly scrolled fetch failed (${res.status}): ${body.slice(0, 300)}`,
+        res.status
+      );
+    }
+
+    const json = (await res.json()) as ScrapflyResponse;
+    const result = json.result ?? {};
+    return {
+      html: result.content ?? "",
+      screenshotBuffer: Buffer.alloc(0),
+      finalUrl: result.url ?? url,
+      statusCode: result.status_code ?? res.status,
+    };
   }
 
   async fetch(url: string): Promise<ScrapeResult> {

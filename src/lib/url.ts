@@ -92,6 +92,26 @@ export function adLibrarySearchUrl(brand: string): string {
   return `https://www.facebook.com/ads/library/?${qs}`;
 }
 
+/**
+ * Every active US ad for one advertiser — the page the harvester scrolls.
+ *
+ * `search_type=page` with `view_all_page_id` is the advertiser view, not a
+ * keyword search, so it returns that page's ads and nothing else. That
+ * distinction is the whole reason page_ids were worth verifying: keyword search
+ * returns whoever is bidding on the word.
+ */
+export function adLibraryPageUrl(pageId: string): string {
+  const qs = new URLSearchParams({
+    active_status: "active",
+    ad_type: "all",
+    country: "US",
+    view_all_page_id: pageId,
+    search_type: "page",
+    media_type: "all",
+  });
+  return `https://www.facebook.com/ads/library/?${qs}`;
+}
+
 export function hostOf(input: string): string | null {
   try {
     return new URL(input).hostname.toLowerCase().replace(/^www\./, "");
