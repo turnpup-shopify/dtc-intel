@@ -85,9 +85,24 @@ structural_craft — message hierarchy, whether the hero does its job,
 Score what is on the page. Do not infer intent or give credit for
 what the page seems to be attempting.`;
 
-const SCORE_FIELD = { type: "integer", minimum: 1, maximum: 5 } as const;
+/**
+ * No `minimum`/`maximum` here, deliberately. The API rejects numeric range
+ * keywords on integer properties in a structured-output schema:
+ *
+ *   output_config.format.schema: for integer type properties
+ *   maximum, minimum are not supported
+ *
+ * Which is a 400 on every single capture — the whole pipeline down for two
+ * fields the schema never had to enforce. The range lives in the description
+ * so the model still knows the scale, and clampScore() is what actually
+ * guarantees it before anything reaches the database.
+ */
+const SCORE_FIELD = {
+  type: "integer",
+  description: "Integer from 1 to 5, where 1 is weakest and 5 is strongest.",
+} as const;
 
-const OUTPUT_SCHEMA = {
+export const OUTPUT_SCHEMA = {
   type: "object",
   properties: {
     blocks: {

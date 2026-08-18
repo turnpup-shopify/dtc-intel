@@ -12,6 +12,7 @@
 import { parseAdLibrary, destinationFrom } from "../src/lib/adlibrary/parse";
 import { normalizeDestination, classify } from "../src/lib/adlibrary/normalize";
 import { collapse, reconcile } from "../src/lib/adlibrary/aggregate";
+import { OUTPUT_SCHEMA } from "../src/lib/extract";
 import {
   FAST_PASS,
   PATIENT_PASS,
@@ -291,6 +292,29 @@ check(
 );
 // The shape of the original bug: 60 scrolls at 1.5s was 93s against a 40s cap.
 check("the original over-budget profile is rejected", fitsScenarioCap({ maxScrolls: 60, delayMs: 1500 }), false);
+
+// ── Structured-output schema ─────────────────────────────────────────────────
+// The API rejects numeric range keywords on integer properties, and it does so
+// with a 400 on EVERY capture — one unsupported keyword takes the whole
+// pipeline down. Cheaper to assert than to rediscover.
+const UNSUPPORTED = ["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf"];
+
+function offendingKeywords(node: unknown, path = "schema"): string[] {
+  if (!node || typeof node !== "object") return [];
+  const found: string[] = [];
+  for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+    if (UNSUPPORTED.includes(k)) found.push(`${path}.${k}`);
+    found.push(...offendingKeywords(v, `${path}.${k}`));
+  }
+  return found;
+}
+
+check("scoring schema uses no unsupported range keywords", offendingKeywords(OUTPUT_SCHEMA), []);
+check(
+  "the guard would catch a reintroduced range keyword",
+  offendingKeywords({ properties: { n: { type: "integer", maximum: 5 } } }),
+  ["schema.properties.n.maximum"]
+);
 
 console.log(`\n  ${passed} passed, ${failures.length} failed\n`);
 for (const f of failures) console.log(`  ✗ ${f}\n`);
