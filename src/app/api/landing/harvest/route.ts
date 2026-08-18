@@ -15,6 +15,7 @@ type HarvestOutcome = HarvestReport & {
   retired: number;
   hooksTouched: number;
   headlinesFound: number;
+  creativesStored: number;
 };
 
 /**
@@ -67,6 +68,7 @@ async function postHandler(request: Request) {
           retired: r.retired,
           headlinesFound: r.headlinesFound,
           hooksTouched: r.hooksTouched,
+          creativesStored: r.creativesStored,
           // The autopsy, flattened so it reads in the run log without drilling.
           ...(r.diagnostics
             ? {
@@ -97,7 +99,7 @@ async function postHandler(request: Request) {
       // call and a Meta token; the cards we already have carry the headline,
       // the snapshot link and the ad id, which is everything the rollup reads.
       // Never let a hooks failure discard a good landing page harvest.
-      let hooks = { hooksTouched: 0, withHeadline: 0 };
+      let hooks = { hooksTouched: 0, withHeadline: 0, creativesStored: 0 };
       try {
         hooks = await syncHooksFromCards(company.id as string, report.cards);
       } catch (err) {
@@ -111,6 +113,7 @@ async function postHandler(request: Request) {
         retired: Number(counts.retired) || 0,
         hooksTouched: hooks.hooksTouched,
         headlinesFound: hooks.withHeadline,
+        creativesStored: hooks.creativesStored,
       };
     }
   );

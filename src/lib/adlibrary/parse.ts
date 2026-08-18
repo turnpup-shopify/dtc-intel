@@ -21,6 +21,11 @@ export interface AdCard {
   destinationUrl: string | null;
   /** The link-preview headline — the "hook". Null when it can't be isolated. */
   headline: string | null;
+  /**
+   * The ad's creative image, straight off Meta's CDN. Short-lived: the URL
+   * carries a signed token, so it must be downloaded during this run or lost.
+   */
+  creativeUrl: string | null;
   /** Permalink back to this ad in the Ad Library. */
   snapshotUrl: string;
 }
@@ -94,6 +99,7 @@ function extractCards($: CheerioAPI): AdCard[] {
       libraryId: id,
       destinationUrl: destinationForCard($, el),
       headline: headlineForCard($, el),
+      creativeUrl: creativeForCard($, el),
       snapshotUrl: `https://www.facebook.com/ads/library/?id=${id}`,
     });
   }
@@ -165,6 +171,72 @@ function headlineForCard($: CheerioAPI, seed: ReturnType<CheerioAPI>[number]): s
   }
 
   return null;
+}
+
+/**
+ * The ad's creative image.
+ *
+ * Every card carries at least two images — the advertiser's profile picture and
+ * the creative itself — and picking the wrong one gives you a wall of identical
+ * brand logos where the ads should be. Two signals separate them:
+ *
+ *  1. Scope. The creative usually sits inside the same outbound anchor as the
+ *     headline; the profile picture sits in the card header, outside it. So the
+ *     anchor is searched first, exactly as it is for the headline.
+ *  2. Size. Meta bakes the rendered dimensions into the CDN path
+ *     ("p720x720", "s60x60"). Anything that small is an avatar, not a creative.
+ *
+ * Falls back to the whole card when the anchor holds no image, still applying
+ * the size floor.
+ */
+function creativeForCard($: CheerioAPI, seed: ReturnType<CheerioAPI>[number]): string | null {
+  const chain = [seed, ...$(seed).parents().toArray()];
+
+  for (const el of chain) {
+    if ((($(el).text().match(LIBRARY_ID_GLOBAL) ?? []).length) !== 1) break;
+
+    const anchors = $(el)
+      .find("a")
+      .toArray()
+      .filter((a) => destinationFrom(linkCandidates($, a)) !== null);
+
+    for (const scope of [...anchors, el]) {
+      const best = pickImage($(scope).find("img").toArray().map((i) => $(i).attr("src")));
+      if (best) return best;
+    }
+  }
+
+  return null;
+}
+
+/** Avatars and UI chrome live below this; ad creatives do not. */
+const MIN_CREATIVE_PX = 150;
+
+function pickImage(srcs: (string | undefined)[]): string | null {
+  let best: { url: string; px: number } | null = null;
+
+  for (const raw of srcs) {
+    if (!raw) continue;
+    const u = safeUrl(raw);
+    if (!u || !isHttp(u)) continue;
+
+    const px = largestDimensionHint(u.pathname);
+    // An unhinted URL might still be the creative, so it stays eligible — it
+    // just loses to anything that proves its size.
+    if (px !== null && px < MIN_CREATIVE_PX) continue;
+
+    const score = px ?? MIN_CREATIVE_PX;
+    if (!best || score > best.px) best = { url: u.toString(), px: score };
+  }
+
+  return best?.url ?? null;
+}
+
+/** Largest NxN figure Meta encoded in the path, e.g. "p720x720" -> 720. */
+function largestDimensionHint(path: string): number | null {
+  const matches = Array.from(path.matchAll(/(\d{2,4})x(\d{2,4})/g));
+  if (matches.length === 0) return null;
+  return Math.max(...matches.flatMap((m) => [Number(m[1]), Number(m[2])]));
 }
 
 /** Own-text of every node in the subtree, so siblings stay separate strings. */

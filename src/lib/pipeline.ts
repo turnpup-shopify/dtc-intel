@@ -175,7 +175,7 @@ async function resolveCompanyId(urlNormalized: string): Promise<string | null> {
  * sharp into a serverless bundle for no retrieval benefit. Store what we
  * actually got, labelled honestly, rather than serving PNG bytes as WebP.
  */
-function sniffImageType(buffer: Buffer): { ext: string; contentType: string } {
+export function sniffImageType(buffer: Buffer): { ext: string; contentType: string } {
   if (buffer.length >= 8 && buffer.subarray(0, 4).toString("hex") === "89504e47") {
     return { ext: "png", contentType: "image/png" };
   }

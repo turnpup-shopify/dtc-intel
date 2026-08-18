@@ -1,4 +1,5 @@
 import { db } from "../supabase";
+import { syncHookCreatives } from "./creatives";
 import { displayLinkTitle, normalizeLinkTitle } from "../text";
 import type { AdCard } from "./parse";
 
@@ -7,6 +8,7 @@ export interface HooksSyncResult {
   /** Cards whose headline could be isolated. Only these can become hooks. */
   withHeadline: number;
   hooksTouched: number;
+  creativesStored: number;
 }
 
 /**
@@ -40,6 +42,7 @@ export async function syncHooksFromCards(
       link_title: displayLinkTitle(c.headline ?? "") || null,
       link_title_norm: normalizeLinkTitle(c.headline ?? "") || null,
       snapshot_url: c.snapshotUrl,
+      creative_url: c.creativeUrl,
       last_seen_at: seenAt,
       still_active: true,
     }));
@@ -64,9 +67,14 @@ export async function syncHooksFromCards(
   });
   if (rollupError) throw new Error(`rebuild_ad_hooks failed: ${rollupError.message}`);
 
+  // After the rollup, because the rollup decides which ad represents each hook.
+  // Downloading earlier would fetch one image per AD rather than per hook.
+  const creatives = await syncHookCreatives(companyId);
+
   return {
     adsSeen: cards.length,
     withHeadline: rows.length,
     hooksTouched: Number(touched) || 0,
+    creativesStored: creatives.stored,
   };
 }

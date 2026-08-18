@@ -28,6 +28,8 @@ interface Hook {
   peakVariantCount: number;
   daysRunning: number;
   snapshotUrl: string | null;
+  creativeUrl: string | null;
+  creativeAdId: string | null;
   status: string;
 }
 
@@ -288,6 +290,7 @@ export default function HooksClient() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left muted text-xs border-b" style={{ borderColor: "var(--border)" }}>
+                <th className="px-3 py-2 font-normal">Ad</th>
                 <th className="px-3 py-2 font-normal">Brand</th>
                 <th className="px-3 py-2 font-normal">Headline</th>
                 <th className="px-3 py-2 font-normal text-right">Variants</th>
@@ -300,6 +303,39 @@ export default function HooksClient() {
             <tbody>
               {hooks.map((hook) => (
                 <tr key={hook.id} className="border-b" style={{ borderColor: "var(--border)" }}>
+                  <td className="px-3 py-2">
+                    {hook.creativeUrl ? (
+                      <a
+                        href={hook.snapshotUrl ?? hook.creativeUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={
+                          hook.creativeAdId
+                            ? `Library ID ${hook.creativeAdId} — open in Ad Library`
+                            : "Open in Ad Library"
+                        }
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={hook.creativeUrl}
+                          alt=""
+                          width={64}
+                          height={64}
+                          loading="lazy"
+                          className="rounded object-cover"
+                          style={{ width: 64, height: 64, background: "var(--panel-2)" }}
+                        />
+                      </a>
+                    ) : (
+                      <div
+                        className="rounded flex items-center justify-center muted"
+                        style={{ width: 64, height: 64, background: "var(--panel-2)", fontSize: 10 }}
+                        title="No creative stored for this hook yet"
+                      >
+                        no art
+                      </div>
+                    )}
+                  </td>
                   <td className="px-3 py-2 whitespace-nowrap">{hook.companyName ?? "—"}</td>
                   <td className="px-3 py-2 max-w-md">{hook.displayTitle}</td>
                   <td className="px-3 py-2 text-right tabular-nums">

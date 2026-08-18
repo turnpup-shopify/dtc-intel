@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requires, withConfig } from "@/lib/api";
-import { db } from "@/lib/supabase";
+import { db, signedScreenshotUrl } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +22,7 @@ async function getHandler(request: Request) {
     // Keep this a single string literal — supabase-js infers the row type from
     // it at the type level, and a concatenated expression defeats that.
     .select(
-      "id, display_title, variant_count, peak_variant_count, days_running, first_seen_at, last_seen_at, snapshot_url, status, company_id, companies(name)"
+      "id, display_title, variant_count, peak_variant_count, days_running, first_seen_at, last_seen_at, snapshot_url, creative_path, creative_ad_id, status, company_id, companies(name)"
     )
     .in("status", status)
     .order("variant_count", { ascending: false })
@@ -31,7 +31,9 @@ async function getHandler(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const hooks = (data ?? []).map((h) => {
+  // Signed in parallel: the bucket is private, so a stored creative is only
+  // viewable through a short-lived URL minted per request.
+  const hooks = await Promise.all((data ?? []).map(async (h) => {
     const company = h.companies as { name?: string } | { name?: string }[] | null;
     return {
       id: h.id as string,
@@ -41,9 +43,11 @@ async function getHandler(request: Request) {
       peakVariantCount: (h.peak_variant_count as number) ?? 0,
       daysRunning: (h.days_running as number) ?? 0,
       snapshotUrl: (h.snapshot_url as string | null) ?? null,
+      creativeUrl: await signedScreenshotUrl(h.creative_path as string | null),
+      creativeAdId: (h.creative_ad_id as string | null) ?? null,
       status: h.status as string,
     };
-  });
+  }));
 
   return NextResponse.json({ hooks });
 }

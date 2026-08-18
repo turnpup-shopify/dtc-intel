@@ -36,6 +36,7 @@ function card(libraryId: string, href: string | null, headline = "The Last Knive
   // anchor holds display domain, headline and button label together.
   const anchor = href
     ? `<a class="x1i10hfl xjbqb8w" href="${href}">
+         <img src="https://scontent.xx.fbcdn.net/v/t45/p720x720/creative.jpg" />
          <div class="x1cy8zhl"><span>DRINKAG1.COM</span></div>
          <div class="x1xmf6yo"><span>${headline}</span></div>
          <div class="x1ja2u2z"><span>Shop Now</span></div>
@@ -45,6 +46,7 @@ function card(libraryId: string, href: string | null, headline = "The Last Knive
     <div class="x1lliihq xjkvuk6">
       <div class="x78zum5 xdt5ytf">
         <div class="_7jvw x2izyaf">
+          <img src="https://scontent.xx.fbcdn.net/v/t39/s60x60/profile.jpg" />
           <span class="x8t9es0">Library ID: ${libraryId}</span>
           <div class="x1rg5ohu">Our longest ad body copy, which is deliberately far longer than the headline so that any rule picking the biggest string across the whole card would grab this instead.</div>
           <div class="x1n2onr6">${anchor}</div>
@@ -234,6 +236,31 @@ check(
   ctaOnly.cards[0]?.headline ?? null,
   null
 );
+
+// ── Creative image ───────────────────────────────────────────────────────────
+// Picking the profile picture instead of the creative gives a wall of identical
+// brand logos where the ads should be — wrong, and wrong in a way that looks
+// like it worked.
+check(
+  "picks the creative, not the profile picture",
+  parsed.cards[0].creativeUrl,
+  "https://scontent.xx.fbcdn.net/v/t45/p720x720/creative.jpg"
+);
+check(
+  "a card with no outbound link still has no creative to attribute",
+  parsed.cards.find((c) => c.libraryId === "5050505050505")!.creativeUrl,
+  null
+);
+
+// Avatar-sized images are rejected outright rather than used as a fallback.
+const avatarOnly = parseAdLibrary(
+  `<html><body><div><span>Library ID: 9090909090909</span>
+     <a href="${wrap("https://x.com/p")}">
+       <img src="https://scontent.xx.fbcdn.net/v/t39/s60x60/tiny.jpg" />
+     </a>
+   </div></body></html>`
+);
+check("rejects avatar-sized images", avatarOnly.cards[0]?.creativeUrl ?? null, null);
 
 // ── Within-run collapse (stage one of the merge) ─────────────────────────────
 const rows = collapse(parsed.cards);
