@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ErrorPanel from "@/components/ErrorPanel";
 import RowDelete from "@/components/RowDelete";
+import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { deleteJson, errorMessage, getJson, postJson } from "@/lib/client";
 
 interface Company {
@@ -116,6 +117,8 @@ export default function LandingClient() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useRefreshOnFocus(load);
 
   async function scanAll(targets: Company[]) {
     if (!targets.length || scanning) return;

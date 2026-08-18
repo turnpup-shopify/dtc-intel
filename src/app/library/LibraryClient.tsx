@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import ErrorPanel from "@/components/ErrorPanel";
 import RowDelete from "@/components/RowDelete";
 import WhyEmpty from "@/components/WhyEmpty";
+import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { deleteJson, errorMessage, getJson } from "@/lib/client";
 
 interface LibraryPage {
@@ -72,6 +73,8 @@ export default function LibraryClient() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useRefreshOnFocus(load);
 
   useEffect(() => {
     void getJson<{ companies: Company[] }>("/api/companies")

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ErrorPanel from "@/components/ErrorPanel";
 import WhyEmpty from "@/components/WhyEmpty";
+import { useRefreshOnFocus } from "@/hooks/useRefreshOnFocus";
 import { errorMessage, getJson, postJson } from "@/lib/client";
 
 interface ReviewItem {
@@ -85,6 +86,10 @@ export default function ReviewClient() {
       .then((d) => setKnownTags(d.tags ?? []))
       .catch(() => undefined);
   }, [load]);
+
+  // Pages arrive here from Landing Pages, the sitemap cron and paste-back, so a
+  // queue fetched once on mount goes stale the moment you capture anything.
+  useRefreshOnFocus(load);
 
   useEffect(() => {
     shotRef.current?.scrollTo({ top: 0 });
@@ -279,7 +284,17 @@ export default function ReviewClient() {
           </span>
         )}
 
-        <span className="ml-auto muted text-xs flex gap-2 items-center">
+        <button
+          onClick={() => void load()}
+          disabled={loading}
+          className="ml-auto text-xs px-2.5 py-1 rounded disabled:opacity-50"
+          style={{ background: "var(--panel-2)" }}
+          title="Re-read the queue. It also refreshes whenever this tab regains focus."
+        >
+          {loading ? "…" : "Refresh"}
+        </button>
+
+        <span className="muted text-xs flex gap-2 items-center">
           <kbd>S</kbd> save <kbd>X</kbd> discard <kbd>0-3</kbd> stars <kbd>T</kbd> tag{" "}
           <kbd>J</kbd>/<kbd>K</kbd> nav <kbd>␣</kbd> scroll
         </span>
