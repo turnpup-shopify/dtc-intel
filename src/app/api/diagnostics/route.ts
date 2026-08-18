@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requires, withConfig } from "@/lib/api";
+import { pendingMigrations } from "@/lib/schema";
 import { db } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -30,7 +31,7 @@ async function getHandler(request: Request) {
   if (kind) runQuery = runQuery.eq("kind", kind);
   if (problemsOnly) runQuery = runQuery.neq("status", "ok");
 
-  const [runs, state] = await Promise.all([runQuery, systemState()]);
+  const [runs, state, pending] = await Promise.all([runQuery, systemState(), pendingMigrations()]);
   if (runs.error) throw new Error(runs.error.message);
 
   const now = Date.now();
@@ -53,7 +54,7 @@ async function getHandler(request: Request) {
     };
   });
 
-  return NextResponse.json({ runs: rows, state });
+  return NextResponse.json({ runs: rows, state, pendingMigrations: pending });
 }
 
 /**

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requires, withConfig } from "@/lib/api";
+import { isMissingColumn } from "@/lib/schema";
 import { db } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -13,25 +14,34 @@ export const dynamic = "force-dynamic";
 async function getHandler(request: Request) {
   const params = new URL(request.url).searchParams;
 
-  let query = db()
-    .from("landing_pages")
-    .select(
-      "id, url, page_type, first_seen, last_seen, runs_seen, ad_records_latest, ad_records_total, example_ad_url, params, company_id, companies(name)"
-    )
-    .eq("hidden", false)
-    .order("ad_records_latest", { ascending: false })
-    .order("last_seen", { ascending: false })
-    .limit(1000);
-
   const companyId = params.get("companyId");
-  if (companyId) query = query.eq("company_id", companyId);
-
   const pageType = params.get("pageType");
-  if (pageType) query = query.eq("page_type", pageType);
+  const liveOnly = params.get("live") === "1";
 
-  if (params.get("live") === "1") query = query.gt("ad_records_latest", 0);
+  // `hidden` arrives with migration 0010. Ask for it, and if the column isn't
+  // there yet, run the same query without the filter rather than 500-ing the
+  // whole tab over a feature that simply isn't installed.
+  const build = (withHidden: boolean) => {
+    let q = db()
+      .from("landing_pages")
+      .select(
+        "id, url, page_type, first_seen, last_seen, runs_seen, ad_records_latest, ad_records_total, example_ad_url, params, company_id, companies(name)"
+      )
+      .order("ad_records_latest", { ascending: false })
+      .order("last_seen", { ascending: false })
+      .limit(1000);
 
-  const { data, error } = await query;
+    if (withHidden) q = q.eq("hidden", false);
+    if (companyId) q = q.eq("company_id", companyId);
+    if (pageType) q = q.eq("page_type", pageType);
+    if (liveOnly) q = q.gt("ad_records_latest", 0);
+    return q;
+  };
+
+  let { data, error } = await build(true);
+  if (error && isMissingColumn(error.message)) {
+    ({ data, error } = await build(false));
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const pages = (data ?? []).map((row) => {

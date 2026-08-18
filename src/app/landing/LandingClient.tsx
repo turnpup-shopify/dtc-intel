@@ -163,6 +163,10 @@ export default function LandingClient() {
 
         setCaptured((prev) => {
           const next = { ...prev };
+          // Seed every id first. A row the server said nothing about would
+          // otherwise render no change at all, and a click that produces no
+          // feedback is indistinguishable from a dead button.
+          for (const id of batch) next[id] = "no result returned";
           for (const r of res.results ?? []) {
             next[r.id] = r.ok
               ? r.status === "discarded"
@@ -398,10 +402,16 @@ export default function LandingClient() {
                   <td className="px-3 py-2 whitespace-nowrap">
                     {captured[p.id] ? (
                       <span
-                        className="text-xs"
-                        style={{
-                          color: /queued/.test(captured[p.id]) ? "var(--accent)" : "var(--muted)",
-                        }}
+                        className="text-xs cursor-pointer"
+                        title={`${captured[p.id]} — click to retry`}
+                        onClick={() =>
+                          setCaptured((prev) => {
+                            const next = { ...prev };
+                            delete next[p.id];
+                            return next;
+                          })
+                        }
+                        style={{ color: captureColor(captured[p.id]) }}
                       >
                         {captured[p.id]}
                       </span>
@@ -462,6 +472,16 @@ function explainDiagnostics(d: NonNullable<HarvestResponse["diagnostics"]>): str
   return `${Math.round(d.htmlBytes / 1024)}kb, ${d.redirectorLinks} outbound links found${
     d.sawResultsText ? "" : ", no count text on page"
   }.`;
+}
+
+/**
+ * queued is the win, rejected is the scoring gate working as designed, and
+ * anything else is a failure that should not read like a quiet success.
+ */
+function captureColor(outcome: string): string {
+  if (/^queued/.test(outcome)) return "var(--accent)";
+  if (/^rejected/.test(outcome)) return "var(--muted)";
+  return "var(--danger)";
 }
 
 function stateLabel(r: ScanRow): string {

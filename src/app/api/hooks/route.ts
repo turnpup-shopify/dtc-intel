@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requires, withConfig } from "@/lib/api";
+import { isMissingColumn } from "@/lib/schema";
 import { db, signedScreenshotUrl } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -17,23 +18,37 @@ async function getHandler(request: Request) {
   const status = params.get("status")?.split(",") ?? ["new", "clicked"];
   const limit = Math.min(Number(params.get("limit")) || 50, 200);
 
-  const { data, error } = await db()
-    .from("ad_hooks")
-    // Keep this a single string literal — supabase-js infers the row type from
-    // it at the type level, and a concatenated expression defeats that.
-    .select(
-      "id, display_title, variant_count, peak_variant_count, days_running, first_seen_at, last_seen_at, snapshot_url, creative_path, creative_ad_id, status, company_id, companies(name)"
-    )
-    .in("status", status)
-    .order("variant_count", { ascending: false })
-    .order("days_running", { ascending: false })
-    .limit(limit);
+  // Two column lists, because the creative columns arrive with migration 0009.
+  // Keep each a single string literal — supabase-js infers the row type from it
+  // at the type level, and a concatenated expression defeats that.
+  const BASE =
+    "id, display_title, variant_count, peak_variant_count, days_running, first_seen_at, last_seen_at, snapshot_url, status, company_id, companies(name)";
+  const WITH_CREATIVES =
+    "id, display_title, variant_count, peak_variant_count, days_running, first_seen_at, last_seen_at, snapshot_url, creative_path, creative_ad_id, status, company_id, companies(name)";
 
+  const build = (columns: string) =>
+    db()
+      .from("ad_hooks")
+      .select(columns)
+      .in("status", status)
+      .order("variant_count", { ascending: false })
+      .order("days_running", { ascending: false })
+      .limit(limit);
+
+  // Optimistic, then fall back. A database one migration behind should cost you
+  // the thumbnails, not the whole queue.
+  let { data, error } = await build(WITH_CREATIVES);
+  if (error && isMissingColumn(error.message)) {
+    ({ data, error } = await build(BASE));
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Signed in parallel: the bucket is private, so a stored creative is only
   // viewable through a short-lived URL minted per request.
-  const hooks = await Promise.all((data ?? []).map(async (h) => {
+  const hooks = await Promise.all((data ?? []).map(async (raw) => {
+    // Widened because the two column lists produce different row shapes; the
+    // creative fields are simply absent on the fallback.
+    const h = raw as unknown as Record<string, unknown>;
     const company = h.companies as { name?: string } | { name?: string }[] | null;
     return {
       id: h.id as string,

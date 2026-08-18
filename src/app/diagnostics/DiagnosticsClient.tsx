@@ -34,6 +34,12 @@ interface State {
 
 type Health = Record<string, unknown> & { ok?: boolean; env?: Record<string, string> };
 
+interface PendingMigration {
+  migration: string;
+  feature: string;
+  missing: string;
+}
+
 const KINDS: Record<string, string> = {
   ad_poll: "Ad poll",
   lp_harvest: "LP harvest",
@@ -54,6 +60,7 @@ export default function DiagnosticsClient() {
   const [health, setHealth] = useState<Health | null>(null);
   const [state, setState] = useState<State | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
+  const [pending, setPending] = useState<PendingMigration[]>([]);
   const [dataError, setDataError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [kind, setKind] = useState("");
@@ -77,9 +84,14 @@ export default function DiagnosticsClient() {
       const qs = new URLSearchParams();
       if (kind) qs.set("kind", kind);
       if (problemsOnly) qs.set("problems", "1");
-      const data = await getJson<{ runs: Run[]; state: State }>(`/api/diagnostics?${qs}`);
+      const data = await getJson<{
+        runs: Run[];
+        state: State;
+        pendingMigrations: PendingMigration[];
+      }>(`/api/diagnostics?${qs}`);
       setRuns(data.runs ?? []);
       setState(data.state ?? null);
+      setPending(data.pendingMigrations ?? []);
     } catch (err) {
       setDataError(errorMessage(err));
     } finally {
@@ -108,6 +120,32 @@ export default function DiagnosticsClient() {
           Refresh
         </button>
       </div>
+
+      {pending.length > 0 && (
+        <section className="panel p-3" style={{ borderColor: "var(--warn)" }}>
+          <h2 className="text-xs font-medium mb-2" style={{ color: "var(--warn)" }}>
+            {pending.length} migration{pending.length === 1 ? "" : "s"} not applied
+          </h2>
+          <p className="muted text-xs mb-2" style={{ maxWidth: "72ch" }}>
+            The deployed code is ahead of the database. Features below are switched off rather
+            than broken — the screens that use them fall back and keep working. Run these in the
+            Supabase SQL editor, in order.
+          </p>
+          <table className="text-xs">
+            <tbody>
+              {pending.map((m) => (
+                <tr key={m.migration}>
+                  <td className="pr-6 py-0.5 font-mono" style={{ color: "var(--warn)" }}>
+                    {m.migration}
+                  </td>
+                  <td className="pr-6 py-0.5 muted font-mono">missing {m.missing}</td>
+                  <td className="py-0.5 muted">disables {m.feature}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
 
       {/* ── 1. Configuration ─────────────────────────────────────────────── */}
       <section className="panel p-3">

@@ -40,6 +40,15 @@ async function postHandler(request: Request) {
 
   if (error) throw new Error(error.message);
 
+  // An empty match used to return ok:true with no results, which the UI had
+  // nothing to render — the click looked like it did nothing at all.
+  if (!targets || targets.length === 0) {
+    return NextResponse.json(
+      { error: "None of those landing pages exist any more. Re-scan and try again." },
+      { status: 404 }
+    );
+  }
+
   const results = [];
   for (const target of targets ?? []) {
     const result = await withRunLog(
