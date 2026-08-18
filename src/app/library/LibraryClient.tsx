@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import ErrorPanel from "@/components/ErrorPanel";
+import RowDelete from "@/components/RowDelete";
 import WhyEmpty from "@/components/WhyEmpty";
-import { errorMessage, getJson } from "@/lib/client";
+import { deleteJson, errorMessage, getJson } from "@/lib/client";
 
 interface LibraryPage {
   id: string;
@@ -133,6 +134,18 @@ export default function LibraryClient() {
                 <span className="ml-auto muted text-xs tabular-nums">
                   {page.compositeScore?.toFixed(2) ?? "—"}
                 </span>
+                <RowDelete
+                  title="Remove from Library. The captured copy is kept, just marked discarded."
+                  armedLabel="Remove?"
+                  onConfirm={async () => {
+                    try {
+                      await deleteJson(`/api/pages/${page.id}`);
+                      setPages((prev) => prev.filter((x) => x.id !== page.id));
+                    } catch (err) {
+                      setError(errorMessage(err));
+                    }
+                  }}
+                />
               </div>
 
               {page.whyGood && <p className="text-sm mt-1.5">{page.whyGood}</p>}

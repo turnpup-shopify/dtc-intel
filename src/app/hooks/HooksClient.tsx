@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import ErrorPanel from "@/components/ErrorPanel";
-import { errorMessage, getJson, postJson } from "@/lib/client";
+import RowDelete from "@/components/RowDelete";
+import { deleteJson, errorMessage, getJson, postJson } from "@/lib/client";
 
 interface Company {
   id: string;
@@ -381,14 +382,20 @@ export default function HooksClient() {
                     >
                       {busy === hook.id ? "…" : "Capture"}
                     </button>
-                    <button
-                      onClick={() => void mark(hook, "dismissed")}
-                      disabled={busy === hook.id}
-                      className="text-xs px-2 py-1 rounded ml-1"
-                      style={{ background: "var(--panel-2)" }}
-                    >
-                      Dismiss
-                    </button>
+                    <span className="inline-block ml-2 align-middle">
+                      <RowDelete
+                        title="Dismiss this hook. It stays dismissed through future scans."
+                        armedLabel="Dismiss?"
+                        onConfirm={async () => {
+                          try {
+                            await deleteJson(`/api/hooks/${hook.id}`);
+                            setHooks((prev) => prev.filter((h) => h.id !== hook.id));
+                          } catch (err) {
+                            notify(errorMessage(err));
+                          }
+                        }}
+                      />
+                    </span>
                   </td>
                 </tr>
               ))}

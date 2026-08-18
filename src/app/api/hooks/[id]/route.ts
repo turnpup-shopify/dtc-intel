@@ -69,4 +69,19 @@ async function postHandler(request: Request, ctx: { params: Promise<{ id: string
   return NextResponse.json({ ok: true, status });
 }
 
+/**
+ * DELETE /api/hooks/:id — dismiss a hook.
+ *
+ * Also not a row delete: rebuild_ad_hooks recreates a hook from its ads on
+ * every scan. It does not touch `status` on conflict, though, so a dismissal
+ * sticks while the counts underneath stay live.
+ */
+async function deleteHandler(_request: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+  const { error } = await db().from("ad_hooks").update({ status: "dismissed" }).eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true, status: "dismissed" });
+}
+
 export const POST = withConfig([requires.supabase, requires.anthropic, requires.scraper], postHandler);
+export const DELETE = withConfig([requires.supabase], deleteHandler);

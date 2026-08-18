@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ErrorPanel from "@/components/ErrorPanel";
-import { errorMessage, getJson, postJson } from "@/lib/client";
+import RowDelete from "@/components/RowDelete";
+import { deleteJson, errorMessage, getJson, postJson } from "@/lib/client";
 
 interface Company {
   id: string;
@@ -342,6 +343,7 @@ export default function LandingClient() {
                 <th className="px-3 py-2 font-normal">Last seen</th>
                 <th className="px-3 py-2 font-normal">Ad</th>
                 <th className="px-3 py-2 font-normal">Archive</th>
+                <th className="px-3 py-2 font-normal" />
               </tr>
             </thead>
             <tbody>
@@ -414,6 +416,20 @@ export default function LandingClient() {
                         {capturing.has(p.id) ? "…" : "Capture"}
                       </button>
                     )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <RowDelete
+                      title="Hide this landing page. It stays hidden through future scans."
+                      armedLabel="Hide?"
+                      onConfirm={async () => {
+                        try {
+                          await deleteJson(`/api/landing/${p.id}`);
+                          setPages((prev) => prev.filter((x) => x.id !== p.id));
+                        } catch (err) {
+                          setError(errorMessage(err));
+                        }
+                      }}
+                    />
                   </td>
                 </tr>
               ))}

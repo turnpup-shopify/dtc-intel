@@ -63,4 +63,33 @@ async function postHandler(request: Request, ctx: { params: Promise<{ id: string
   return NextResponse.json({ company: data });
 }
 
+/**
+ * DELETE /api/companies/:id — remove a brand and everything derived from it.
+ *
+ * A real delete, because a company is the one row here that isn't rebuilt from
+ * anything. ads, ad_hooks and landing_pages cascade away with it; captured
+ * pages do NOT — pages.company_id is ON DELETE SET NULL, so archived copy
+ * survives and only loses its brand label. The response reports what went so
+ * the UI can say it rather than the person discovering it later.
+ */
+async function deleteHandler(_request: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
+
+  const [{ count: hooks }, { count: pages }, { count: landing }] = await Promise.all([
+    db().from("ad_hooks").select("id", { count: "exact", head: true }).eq("company_id", id),
+    db().from("pages").select("id", { count: "exact", head: true }).eq("company_id", id),
+    db().from("landing_pages").select("id", { count: "exact", head: true }).eq("company_id", id),
+  ]);
+
+  const { error } = await db().from("companies").delete().eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({
+    ok: true,
+    deleted: { hooks: hooks ?? 0, landingPages: landing ?? 0 },
+    orphanedPages: pages ?? 0,
+  });
+}
+
 export const POST = withConfig([requires.supabase], postHandler);
+export const DELETE = withConfig([requires.supabase], deleteHandler);

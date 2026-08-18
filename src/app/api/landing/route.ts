@@ -18,6 +18,7 @@ async function getHandler(request: Request) {
     .select(
       "id, url, page_type, first_seen, last_seen, runs_seen, ad_records_latest, ad_records_total, example_ad_url, params, company_id, companies(name)"
     )
+    .eq("hidden", false)
     .order("ad_records_latest", { ascending: false })
     .order("last_seen", { ascending: false })
     .limit(1000);

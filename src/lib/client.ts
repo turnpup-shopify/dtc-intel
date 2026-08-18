@@ -32,6 +32,16 @@ export async function postJson<T>(url: string, body: unknown): Promise<T> {
   return parse<T>(res, url);
 }
 
+export async function deleteJson<T>(url: string): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(url, { method: "DELETE" });
+  } catch {
+    throw new Error(`Could not reach ${url} — is the dev server still running?`);
+  }
+  return parse<T>(res, url);
+}
+
 async function parse<T>(res: Response, url: string): Promise<T> {
   const raw = await res.text();
 

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import ErrorPanel from "@/components/ErrorPanel";
-import { errorMessage, getJson, postJson } from "@/lib/client";
+import RowDelete from "@/components/RowDelete";
+import { deleteJson, errorMessage, getJson, postJson } from "@/lib/client";
 import { CATEGORIES, TIERS } from "@/lib/categories";
 import { adLibrarySearchUrl, extractMetaPageId } from "@/lib/url";
 
@@ -168,6 +169,7 @@ export default function CompaniesClient() {
                 <th className="px-3 py-2 font-normal">Category</th>
                 <th className="px-3 py-2 font-normal">meta_page_id</th>
                 <th className="px-3 py-2 font-normal">Find it</th>
+                <th className="px-3 py-2 font-normal" />
               </tr>
             </thead>
             <tbody>
@@ -229,6 +231,28 @@ export default function CompaniesClient() {
                         search Ad Library ↗
                       </a>
                     )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <RowDelete
+                      warn
+                      title="Delete this brand. Its ads, hooks and landing pages go with it; captured pages survive but lose their brand label."
+                      armedLabel="Delete brand?"
+                      onConfirm={async () => {
+                        try {
+                          const res = await deleteJson<{ orphanedPages: number }>(
+                            `/api/companies/${c.id}`
+                          );
+                          setCompanies((prev) => prev.filter((x) => x.id !== c.id));
+                          if (res.orphanedPages > 0) {
+                            setError(
+                              `Deleted. ${res.orphanedPages} archived page(s) were kept but no longer show a brand.`
+                            );
+                          }
+                        } catch (err) {
+                          setError(errorMessage(err));
+                        }
+                      }}
+                    />
                   </td>
                 </tr>
               ))}
