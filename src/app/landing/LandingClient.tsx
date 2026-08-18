@@ -97,8 +97,14 @@ export default function LandingClient() {
     [companies]
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  /**
+   * `silent` skips the loading flag so a background refresh doesn't blank the
+   * screen. Without it, refreshing on focus replaced the whole table with
+   * "Loading…", the page collapsed to one line, the browser scrolled to the top,
+   * and any button mid-click was unmounted before it fired.
+   */
+  const load = useCallback(async (opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setLoading(true);
     setError(null);
     try {
       const [c, p] = await Promise.all([
@@ -110,7 +116,7 @@ export default function LandingClient() {
     } catch (err) {
       setError(errorMessage(err));
     } finally {
-      setLoading(false);
+      if (!opts.silent) setLoading(false);
     }
   }, []);
 
@@ -118,7 +124,7 @@ export default function LandingClient() {
     void load();
   }, [load]);
 
-  useRefreshOnFocus(load);
+  useRefreshOnFocus(() => load({ silent: true }));
 
   async function scanAll(targets: Company[]) {
     if (!targets.length || scanning) return;

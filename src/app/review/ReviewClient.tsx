@@ -65,8 +65,14 @@ export default function ReviewClient() {
 
   const current = items[index];
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  /**
+   * `silent` skips the loading flag so a background refresh doesn't blank the
+   * screen. Without it, refreshing on focus replaced the whole table with
+   * "Loading…", the page collapsed to one line, the browser scrolled to the top,
+   * and any button mid-click was unmounted before it fired.
+   */
+  const load = useCallback(async (opts: { silent?: boolean } = {}) => {
+    if (!opts.silent) setLoading(true);
     setError(null);
     try {
       const data = await getJson<{ items: ReviewItem[]; pending: number }>("/api/queue");
@@ -76,7 +82,7 @@ export default function ReviewClient() {
     } catch (err) {
       setError(errorMessage(err));
     } finally {
-      setLoading(false);
+      if (!opts.silent) setLoading(false);
     }
   }, []);
 
@@ -89,7 +95,14 @@ export default function ReviewClient() {
 
   // Pages arrive here from Landing Pages, the sitemap cron and paste-back, so a
   // queue fetched once on mount goes stale the moment you capture anything.
-  useRefreshOnFocus(load);
+  //
+  // Only auto-refresh an EMPTY queue, though. That is the case worth fixing —
+  // you captured elsewhere and came back to what looks like nothing. Reloading
+  // while someone is working the queue would swap the card under their cursor
+  // mid-keystroke, which is a worse bug than a slightly stale list.
+  useRefreshOnFocus(() => {
+    if (items.length === 0) return load({ silent: true });
+  });
 
   useEffect(() => {
     shotRef.current?.scrollTo({ top: 0 });
