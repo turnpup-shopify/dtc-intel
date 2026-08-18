@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveSupabaseVar } from "./env";
+import { migrationFor } from "./schema";
 
 /**
  * Configuration preflight.
@@ -79,7 +80,9 @@ export function withConfig<A extends unknown[]>(
       return NextResponse.json(
         {
           error: notMigrated
-            ? `${message} — it looks like the database schema hasn't been applied. Run supabase/migrations/0001_init.sql against your project.`
+            ? `${message} — run supabase/migrations/${
+                migrationFor(message) ?? "0001_init.sql"
+              } in the Supabase SQL editor. Diagnostics lists every migration still outstanding.`
             : message,
           code: notMigrated ? "not_migrated" : "server_error",
         },

@@ -61,6 +61,7 @@ export default function DiagnosticsClient() {
   const [state, setState] = useState<State | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
   const [pending, setPending] = useState<PendingMigration[]>([]);
+  const [runLogMissing, setRunLogMissing] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [kind, setKind] = useState("");
@@ -88,10 +89,12 @@ export default function DiagnosticsClient() {
         runs: Run[];
         state: State;
         pendingMigrations: PendingMigration[];
+        runLogMissing?: boolean;
       }>(`/api/diagnostics?${qs}`);
       setRuns(data.runs ?? []);
       setState(data.state ?? null);
       setPending(data.pendingMigrations ?? []);
+      setRunLogMissing(Boolean(data.runLogMissing));
     } catch (err) {
       setDataError(errorMessage(err));
     } finally {
@@ -274,6 +277,11 @@ export default function DiagnosticsClient() {
 
         {loading ? (
           <p className="muted text-sm px-3 pb-3">Loading…</p>
+        ) : runLogMissing ? (
+          <p className="text-sm px-3 pb-3" style={{ color: "var(--warn)", maxWidth: "72ch" }}>
+            No run log table. Jobs are still running and still working — they just are not being
+            recorded. Apply 0006_run_log.sql and the next run shows up here.
+          </p>
         ) : runs.length === 0 ? (
           <p className="muted text-sm px-3 pb-3">
             Nothing logged yet. Runs appear here after a poll, a harvest, a sitemap sweep, or a

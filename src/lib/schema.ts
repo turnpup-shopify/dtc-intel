@@ -51,3 +51,40 @@ export async function pendingMigrations(): Promise<PendingMigration[]> {
 
   return (await Promise.all(checks)).filter((x): x is PendingMigration => x !== null);
 }
+
+/** Which migration creates each table and function, for error messages. */
+const CREATED_BY: Record<string, string> = {
+  // 0001_init
+  companies: "0001_init.sql",
+  pages: "0001_init.sql",
+  page_versions: "0001_init.sql",
+  copy_blocks: "0001_init.sql",
+  tags: "0001_init.sql",
+  page_tags: "0001_init.sql",
+  ads: "0001_init.sql",
+  ad_hooks: "0001_init.sql",
+  ingest_page_version: "0001_init.sql",
+  rebuild_ad_hooks: "0001_init.sql",
+  search_copy_blocks: "0001_init.sql",
+  // later
+  landing_pages: "0005_landing_pages.sql",
+  merge_landing_pages: "0005_landing_pages.sql",
+  run_log: "0006_run_log.sql",
+  prune_run_log: "0006_run_log.sql",
+};
+
+/**
+ * Name the migration a missing relation actually comes from.
+ *
+ * The old message assumed any missing table meant the schema was never
+ * applied, and sent people to 0001 — which is actively misleading once 0001 IS
+ * applied and the gap is a later migration. "Run 0001" on a working database
+ * reads as "your database is broken" rather than "you are five files behind".
+ */
+export function migrationFor(message: string): string | null {
+  const match = message.match(
+    /relation ["']?(?:public\.)?([a-z_]+)["']? does not exist|could not find the (?:table|function) ["']?(?:public\.)?([a-z_]+)/i
+  );
+  const name = match?.[1] ?? match?.[2];
+  return name ? (CREATED_BY[name] ?? null) : null;
+}

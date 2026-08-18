@@ -32,10 +32,19 @@ async function getHandler(request: Request) {
   if (problemsOnly) runQuery = runQuery.neq("status", "ok");
 
   const [runs, state, pending] = await Promise.all([runQuery, systemState(), pendingMigrations()]);
-  if (runs.error) throw new Error(runs.error.message);
+
+  // The run log is created by 0006, which may not have been applied — and this
+  // is the screen that exists to TELL you that. Throwing here would take down
+  // the pending-migrations panel along with everything else, leaving the one
+  // tool that could explain the problem reporting only the problem.
+  const runLogMissing =
+    Boolean(runs.error) &&
+    /relation .* does not exist|could not find the table/i.test(runs.error?.message ?? "");
+
+  if (runs.error && !runLogMissing) throw new Error(runs.error.message);
 
   const now = Date.now();
-  const rows = (runs.data ?? []).map((row) => {
+  const rows = runLogMissing ? [] : (runs.data ?? []).map((row) => {
     const { companies, ...rest } = row as typeof row & {
       companies: { name: string } | { name: string }[] | null;
     };
@@ -54,7 +63,7 @@ async function getHandler(request: Request) {
     };
   });
 
-  return NextResponse.json({ runs: rows, state, pendingMigrations: pending });
+  return NextResponse.json({ runs: rows, state, pendingMigrations: pending, runLogMissing });
 }
 
 /**
