@@ -129,6 +129,22 @@ export const env = {
     return num("DAILY_PAGE_CAP", 15);
   },
   get scoreThreshold() {
-    return num("SCORE_THRESHOLD", 3.4);
+    /**
+     * The gate's job is keeping junk out — bot walls, checkout confirmations,
+     * pages that rendered nothing. It is NOT the quality bar; stars in Review
+     * are, and a gate strict enough to curate leaves nothing to curate.
+     *
+     * Was 3.4, which in practice rejected everything. The composite is a
+     * weighted mean on a 1-5 scale where voice_distinctiveness carries double
+     * weight, and that dimension scores 1 whenever the copy would still work
+     * under a competitor's logo — true of most DTC pages. A solid but
+     * unremarkable page lands near 2.75, so 3.4 admitted almost nothing while
+     * looking like a scoring failure.
+     *
+     * 2.5 sits below anything real we have observed and above genuine junk,
+     * which scores near the floor. Raise it once you have enough pages to see
+     * your own distribution.
+     */
+    return num("SCORE_THRESHOLD", 2.5);
   },
 };
