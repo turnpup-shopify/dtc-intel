@@ -24,6 +24,8 @@ interface Company {
  */
 export default function CompaniesClient() {
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [scanning, setScanning] = useState<Set<string>>(new Set());
+  const [scanned, setScanned] = useState<Record<string, string>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   /** Blocks the whole screen (load failed). */
@@ -97,6 +99,41 @@ export default function CompaniesClient() {
 
   const mapped = companies.filter((c) => c.meta_page_id).length;
 
+  /**
+   * Run discovery for one brand, from the screen where brands live.
+   *
+   * This is the same scrape the Landing Pages tab runs — one endpoint, so the
+   * two can't drift. It just wasn't reachable from here, which is where anyone
+   * looking at a brand naturally expects to start.
+   */
+  async function scan(c: Company) {
+    if (!c.meta_page_id || scanning.has(c.id)) return;
+    setScanning((prev) => new Set([...prev, c.id]));
+    setScanned((prev) => ({ ...prev, [c.id]: "" }));
+
+    try {
+      const r = await postJson<{
+        cardsHarvested: number;
+        rows: unknown[];
+        inserted: number;
+        hooksTouched: number;
+      }>("/api/landing/harvest", { companyId: c.id });
+
+      setScanned((prev) => ({
+        ...prev,
+        [c.id]: `${r.cardsHarvested} ads · ${r.rows.length} pages (+${r.inserted} new) · ${r.hooksTouched} hooks`,
+      }));
+    } catch (err) {
+      setScanned((prev) => ({ ...prev, [c.id]: errorMessage(err) }));
+    } finally {
+      setScanning((prev) => {
+        const next = new Set(prev);
+        next.delete(c.id);
+        return next;
+      });
+    }
+  }
+
   if (error) return <ErrorPanel error={error} onRetry={() => void load()} />;
 
   return (
@@ -169,6 +206,7 @@ export default function CompaniesClient() {
                 <th className="px-3 py-2 font-normal">Category</th>
                 <th className="px-3 py-2 font-normal">meta_page_id</th>
                 <th className="px-3 py-2 font-normal">Find it</th>
+                <th className="px-3 py-2 font-normal">Discover</th>
                 <th className="px-3 py-2 font-normal" />
               </tr>
             </thead>
@@ -230,6 +268,40 @@ export default function CompaniesClient() {
                       >
                         search Ad Library ↗
                       </a>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 whitespace-nowrap">
+                    {!c.meta_page_id ? (
+                      <span className="muted text-xs" title="Add a meta_page_id first — there is nothing to scrape without it.">
+                        needs page_id
+                      </span>
+                    ) : scanned[c.id] ? (
+                      <span
+                        className="text-xs cursor-pointer"
+                        title="Click to scan again"
+                        onClick={() =>
+                          setScanned((prev) => {
+                            const next = { ...prev };
+                            delete next[c.id];
+                            return next;
+                          })
+                        }
+                        style={{
+                          color: /ads ·/.test(scanned[c.id]) ? "var(--accent)" : "var(--danger)",
+                        }}
+                      >
+                        {scanned[c.id]}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => void scan(c)}
+                        disabled={scanning.has(c.id)}
+                        className="text-xs px-2 py-1 rounded disabled:opacity-40"
+                        style={{ background: "var(--panel-2)" }}
+                        title="Scrape this brand's live ads and collect the landing pages they point at"
+                      >
+                        {scanning.has(c.id) ? "Scanning…" : "Scan ads"}
+                      </button>
                     )}
                   </td>
                   <td className="px-3 py-2">

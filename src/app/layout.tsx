@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import FlowMenu from "@/components/FlowMenu";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -36,6 +37,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 {item.label}
               </Link>
             ))}
+            <span className="ml-auto">
+              <FlowMenu />
+            </span>
           </nav>
         </header>
         <main>{children}</main>
