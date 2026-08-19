@@ -1,5 +1,7 @@
 "use client";
 
+import { log } from "./logbook";
+
 /**
  * Every screen fetches through this.
  *
@@ -12,8 +14,10 @@ export async function getJson<T>(url: string): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url);
-  } catch {
-    throw new Error(`Could not reach ${url} — is the dev server still running?`);
+  } catch (err) {
+    const message = `Could not reach ${url} — is the dev server still running?`;
+    log("network", url, message, err instanceof Error ? err.message : String(err));
+    throw new Error(message);
   }
   return parse<T>(res, url);
 }
@@ -26,8 +30,10 @@ export async function postJson<T>(url: string, body: unknown): Promise<T> {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-  } catch {
-    throw new Error(`Could not reach ${url} — is the dev server still running?`);
+  } catch (err) {
+    const message = `Could not reach ${url} — is the dev server still running?`;
+    log("network", url, message, err instanceof Error ? err.message : String(err));
+    throw new Error(message);
   }
   return parse<T>(res, url);
 }
@@ -36,8 +42,10 @@ export async function deleteJson<T>(url: string): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, { method: "DELETE" });
-  } catch {
-    throw new Error(`Could not reach ${url} — is the dev server still running?`);
+  } catch (err) {
+    const message = `Could not reach ${url} — is the dev server still running?`;
+    log("network", url, message, err instanceof Error ? err.message : String(err));
+    throw new Error(message);
   }
   return parse<T>(res, url);
 }
@@ -58,6 +66,9 @@ async function parse<T>(res: Response, url: string): Promise<T> {
     const message =
       (parsed as { error?: string } | null)?.error ??
       (raw ? raw.slice(0, 200) : `${url} returned ${res.status} with an empty body`);
+    // Recorded here rather than at each call site: every screen funnels through
+    // this, so one hook catches all of them and none can forget.
+    log("api", url, message, `HTTP ${res.status}${raw ? ` · ${raw.slice(0, 400)}` : ""}`);
     throw new Error(message);
   }
 

@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AUTOMATIC, SILENT_DROPS, SPEC_UPDATED, STAGES } from "@/lib/flow-spec";
+import LogPanel from "@/components/LogPanel";
+import { entries, installGlobalHandlers } from "@/lib/logbook";
+import { AUTOMATIC, DEBUGGING, SILENT_DROPS, SPEC_UPDATED, STAGES } from "@/lib/flow-spec";
 
 /**
  * The spec, one click away on every screen.
@@ -13,6 +15,21 @@ import { AUTOMATIC, SILENT_DROPS, SPEC_UPDATED, STAGES } from "@/lib/flow-spec";
  */
 export default function FlowMenu() {
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<"guide" | "logs">("guide");
+  const [faults, setFaults] = useState(0);
+
+  // Installed from the one component that renders on every screen.
+  useEffect(() => {
+    installGlobalHandlers();
+  }, []);
+
+  // A count on the closed menu, so a fault is visible without going looking.
+  useEffect(() => {
+    const tick = () => setFaults(entries().length);
+    tick();
+    const id = setInterval(tick, 4000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -30,11 +47,25 @@ export default function FlowMenu() {
         aria-label="How this app works"
         title="How this app works"
         className="flex flex-col justify-center gap-[3px] px-2 py-1.5 rounded hover:bg-white/5"
-        style={{ width: 30 }}
+        style={{ width: 30, position: "relative" }}
       >
         <span style={{ height: 1.5, background: "currentColor", display: "block" }} />
         <span style={{ height: 1.5, background: "currentColor", display: "block" }} />
         <span style={{ height: 1.5, background: "currentColor", display: "block" }} />
+        {faults > 0 && (
+          <span
+            aria-label={`${faults} recorded faults`}
+            style={{
+              position: "absolute",
+              top: 0,
+              right: 0,
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: "var(--danger)",
+            }}
+          />
+        )}
       </button>
 
       {open && (
@@ -59,8 +90,28 @@ export default function FlowMenu() {
               <h2 className="text-sm font-medium">How this app works</h2>
               <span className="muted text-xs">updated {SPEC_UPDATED}</span>
               <button
+                onClick={() => setTab("guide")}
+                className="ml-auto text-xs px-2.5 py-1 rounded"
+                style={{
+                  background: tab === "guide" ? "var(--panel-2)" : "transparent",
+                  color: tab === "guide" ? undefined : "var(--muted)",
+                }}
+              >
+                How it works
+              </button>
+              <button
+                onClick={() => setTab("logs")}
+                className="text-xs px-2.5 py-1 rounded"
+                style={{
+                  background: tab === "logs" ? "var(--panel-2)" : "transparent",
+                  color: tab === "logs" ? undefined : "var(--muted)",
+                }}
+              >
+                Logs{faults > 0 ? ` (${faults})` : ""}
+              </button>
+              <button
                 onClick={() => setOpen(false)}
-                className="ml-auto text-xs px-2 py-1 rounded"
+                className="text-xs px-2 py-1 rounded"
                 style={{ background: "var(--panel-2)" }}
               >
                 Close
@@ -68,6 +119,10 @@ export default function FlowMenu() {
             </div>
 
             <div className="px-5 py-4 space-y-5 text-sm">
+              {tab === "logs" ? (
+                <LogPanel />
+              ) : (
+              <>
               <p className="muted" style={{ maxWidth: "62ch" }}>
                 Five stages, in order. Each one produces the input for the next, and nothing skips
                 ahead — a page only becomes searchable by passing through all five.
@@ -123,6 +178,15 @@ export default function FlowMenu() {
               </section>
 
               <section className="panel p-4 space-y-2">
+                <h3 className="font-medium text-sm">When something is wrong</h3>
+                <ul className="ml-4 list-disc space-y-1 text-xs muted">
+                  {DEBUGGING.map((d) => (
+                    <li key={d}>{d}</li>
+                  ))}
+                </ul>
+              </section>
+
+              <section className="panel p-4 space-y-2">
                 <h3 className="font-medium text-sm">Where things vanish without an error</h3>
                 <p className="muted text-xs">
                   All of these are deliberate. All of them look like a bug from the outside, which
@@ -143,6 +207,8 @@ export default function FlowMenu() {
                   </span>
                 </p>
               </section>
+              </>
+              )}
             </div>
           </aside>
         </div>

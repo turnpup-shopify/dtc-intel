@@ -122,6 +122,14 @@ export const AUTOMATIC: AutoJob[] = [
   },
 ];
 
+/** Where to look when something is wrong, in the order worth trying. */
+export const DEBUGGING: string[] = [
+  "Hamburger → Logs — every failed request, unreachable server and uncaught crash this browser has seen. Survives a reload, needs no database.",
+  "Hamburger → Logs → Copy report — config, pipeline counts, missing migrations, recent runs and those faults in one paste. Send this rather than describing the symptom.",
+  "Diagnostics — the same picture server-side, plus the run log of every job and which migrations the schema is missing.",
+  "An empty Review or Library says WHY it is empty, and links to the fix.",
+];
+
 /** Where things vanish without an error. Every one of these is by design. */
 export const SILENT_DROPS: string[] = [
   "Scored below SCORE_THRESHOLD — captured, scored, then filed as discarded without ever appearing in Review.",
