@@ -24,6 +24,7 @@ interface Company {
  */
 export default function CompaniesClient() {
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [scanning, setScanning] = useState<Set<string>>(new Set());
   const [scanned, setScanned] = useState<Record<string, string>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -134,6 +135,34 @@ export default function CompaniesClient() {
     }
   }
 
+  /**
+   * Scan several brands back to back.
+   *
+   * Sequential on purpose. Each brand is a scroll-and-parse that takes most of
+   * a minute, and firing them in parallel would stack concurrent scrape calls
+   * against one provider account for no gain — the bottleneck is Meta's
+   * lazy-loader, not our request rate.
+   */
+  async function scanMany(list: Company[]) {
+    const targets = list.filter((c) => c.meta_page_id && !scanning.has(c.id));
+    for (const c of targets) {
+      await scan(c);
+    }
+  }
+
+  const scannable = companies.filter((c) => c.meta_page_id);
+  const chosen = companies.filter((c) => selected.has(c.id) && c.meta_page_id);
+  const busy = scanning.size > 0;
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   if (error) return <ErrorPanel error={error} onRetry={() => void load()} />;
 
   return (
@@ -150,6 +179,26 @@ export default function CompaniesClient() {
             {notice}
           </span>
         )}
+
+        <button
+          onClick={() => void scanMany(chosen)}
+          disabled={busy || chosen.length === 0}
+          className="text-xs px-3 py-1.5 rounded ml-auto disabled:opacity-40 whitespace-nowrap"
+          style={{ background: "var(--panel-2)" }}
+          title="Scan only the ticked brands"
+        >
+          {busy && chosen.length > 0 ? "Scanning…" : `Scan selected (${chosen.length})`}
+        </button>
+
+        <button
+          onClick={() => void scanMany(scannable)}
+          disabled={busy || scannable.length === 0}
+          className="text-xs px-3 py-1.5 rounded disabled:opacity-40 whitespace-nowrap"
+          style={{ background: "var(--accent)", color: "#08130e" }}
+          title="Scan every brand that has a page_id. One at a time; expect about a minute each."
+        >
+          {busy && chosen.length === 0 ? `Scanning ${scanning.size}…` : `Scan all ${scannable.length}`}
+        </button>
       </div>
 
       <form onSubmit={addCompany} className="flex gap-2 mb-3 text-sm">
@@ -200,6 +249,21 @@ export default function CompaniesClient() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left muted text-xs border-b" style={{ borderColor: "var(--border)" }}>
+                <th className="px-3 py-2 font-normal" style={{ width: 28 }}>
+                  <input
+                    type="checkbox"
+                    aria-label="Select every brand with a page_id"
+                    title="Select every brand with a page_id"
+                    checked={chosen.length > 0 && chosen.length === scannable.length}
+                    ref={(el) => {
+                      // Partial selection reads as neither on nor off.
+                      if (el) el.indeterminate = chosen.length > 0 && chosen.length < scannable.length;
+                    }}
+                    onChange={(e) =>
+                      setSelected(e.target.checked ? new Set(scannable.map((c) => c.id)) : new Set())
+                    }
+                  />
+                </th>
                 <th className="px-3 py-2 font-normal">Brand</th>
                 <th className="px-3 py-2 font-normal">Domain</th>
                 <th className="px-3 py-2 font-normal">Tier</th>
@@ -213,6 +277,16 @@ export default function CompaniesClient() {
             <tbody>
               {companies.map((c) => (
                 <tr key={c.id} className="border-b" style={{ borderColor: "var(--border)" }}>
+                  <td className="px-3 py-1.5">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${c.name}`}
+                      checked={selected.has(c.id)}
+                      disabled={!c.meta_page_id}
+                      title={c.meta_page_id ? `Select ${c.name}` : "No page_id — nothing to scan"}
+                      onChange={() => toggle(c.id)}
+                    />
+                  </td>
                   <td className="px-3 py-1.5 whitespace-nowrap">{c.name}</td>
                   <td className="px-3 py-1.5 text-xs">
                     {c.domain ? (

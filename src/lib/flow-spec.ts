@@ -10,7 +10,7 @@
  * wrong model and they debug against it.
  */
 
-export const SPEC_UPDATED = "2026-08-18";
+export const SPEC_UPDATED = "2026-08-19";
 
 export interface Stage {
   id: string;
@@ -45,9 +45,10 @@ export const STAGES: Stage[] = [
   {
     id: "scan",
     title: "2 · Scan for landing pages",
-    where: "Companies → Scan ads, or Landing Pages → Scan all",
+    where: "Companies → Scan all / Scan selected / Scan ads",
     purpose: "Find every page the brand is currently sending ad traffic to.",
     steps: [
+      "Scan all does every mapped brand; tick rows and Scan selected does just those; Scan ads on a row does one. Same job either way, run one brand at a time.",
       "Scrolls the brand's public Ad Library page with a JS-rendering scraper.",
       "Reads each ad's destination out of Meta's l.php link wrapper — no Meta API, no credential.",
       "Dedupes on host + path, so one page counts once no matter how many ads point at it.",
