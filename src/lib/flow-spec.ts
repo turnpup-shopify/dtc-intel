@@ -78,7 +78,8 @@ export const STAGES: Stage[] = [
     where: "Review",
     purpose: "The one human decision, and the only route into the archive.",
     steps: [
-      "One page at a time: screenshot, score, the extracted copy blocks, and why it is good.",
+      "Opens on a list of everything queued — brand, page, score, stars, why it scored.",
+      "Click a row to open it: screenshot, score breakdown, extracted copy blocks. Esc or “← All” goes back.",
       "0–3 stars, tags, then S to save or X to discard.",
       "Saving is what makes a page searchable.",
     ],

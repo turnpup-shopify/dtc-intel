@@ -50,6 +50,9 @@ const BLOCK_COLORS: Record<string, string> = {
 export default function ReviewClient() {
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [pending, setPending] = useState(0);
+  // Start on the list. The card is for working one page; the list is for
+  // seeing what you have, which is the question you arrive with.
+  const [view, setView] = useState<"list" | "detail">("list");
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [flash, setFlash] = useState<string | null>(null);
@@ -170,6 +173,11 @@ export default function ReviewClient() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
+
+      // Card-only. In list view these would save or discard whatever `index`
+      // happens to point at — invisible, and destructive.
+      if (view !== "detail") return;
+
       const inField =
         target &&
         (target.tagName === "INPUT" ||
@@ -182,6 +190,12 @@ export default function ReviewClient() {
           setTagDraft("");
           (target as HTMLInputElement).blur();
         }
+        return;
+      }
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setView("list");
         return;
       }
 
@@ -226,7 +240,7 @@ export default function ReviewClient() {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [decide, setStars, items.length]);
+  }, [decide, setStars, items.length, view]);
 
   const tagSuggestions = useMemo(() => {
     if (!tagDraft) return [];
@@ -264,13 +278,27 @@ export default function ReviewClient() {
         className="flex items-center gap-4 px-4 py-2 border-b text-sm"
         style={{ borderColor: "var(--border)" }}
       >
-        <span className="font-medium">
-          {pending} pending
-          {items.length > 0 && (
-            <span className="muted font-normal">
-              {" "}
-              · {index + 1}/{items.length}
-            </span>
+        {view === "detail" && (
+          <button
+            onClick={() => setView("list")}
+            className="text-xs px-2.5 py-1 rounded whitespace-nowrap"
+            style={{ background: "var(--panel-2)" }}
+            title="Back to the queue (Esc)"
+          >
+            ← All {pending}
+          </button>
+        )}
+
+        <span className="font-medium whitespace-nowrap">
+          {view === "detail" && items.length > 0 ? (
+            <>
+              {index + 1}
+              <span className="muted font-normal">/{items.length}</span>
+            </>
+          ) : (
+            <>
+              {pending} <span className="muted font-normal">pending</span>
+            </>
           )}
         </span>
 
@@ -308,8 +336,14 @@ export default function ReviewClient() {
         </button>
 
         <span className="muted text-xs flex gap-2 items-center">
-          <kbd>S</kbd> save <kbd>X</kbd> discard <kbd>0-3</kbd> stars <kbd>T</kbd> tag{" "}
-          <kbd>J</kbd>/<kbd>K</kbd> nav <kbd>␣</kbd> scroll
+          {view === "detail" ? (
+            <>
+              <kbd>S</kbd> save <kbd>X</kbd> discard <kbd>0-3</kbd> stars <kbd>T</kbd> tag{" "}
+              <kbd>J</kbd>/<kbd>K</kbd> nav <kbd>Esc</kbd> list
+            </>
+          ) : (
+            <>click a row to open it</>
+          )}
         </span>
       </div>
 
@@ -317,6 +351,71 @@ export default function ReviewClient() {
         <ErrorPanel error={error} onRetry={() => void load()} />
       ) : loading ? (
         <p className="muted p-6 text-sm">Loading queue…</p>
+      ) : items.length === 0 ? (
+        <div className="p-8">
+          <WhyEmpty screen="review" />
+        </div>
+      ) : view === "list" ? (
+        <div className="flex-1 overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr
+                className="text-left muted text-xs border-b sticky top-0"
+                style={{ borderColor: "var(--border)", background: "var(--bg)" }}
+              >
+                <th className="px-4 py-2 font-normal">Brand</th>
+                <th className="px-4 py-2 font-normal">Page</th>
+                <th className="px-4 py-2 font-normal text-right">Score</th>
+                <th className="px-4 py-2 font-normal">Stars</th>
+                <th className="px-4 py-2 font-normal">Why it scored</th>
+                <th className="px-4 py-2 font-normal text-right">Blocks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, i) => (
+                <tr
+                  key={item.id}
+                  onClick={() => {
+                    setIndex(i);
+                    setView("detail");
+                  }}
+                  className="border-b cursor-pointer hover:bg-white/5"
+                  style={{ borderColor: "var(--border)" }}
+                  title="Open this page"
+                >
+                  <td className="px-4 py-2.5 whitespace-nowrap">{item.companyName ?? "—"}</td>
+                  <td className="px-4 py-2.5 max-w-md">
+                    <div className="truncate">{item.title ?? "(untitled)"}</div>
+                    <div className="muted text-xs truncate">
+                      {item.url.replace(/^https?:\/\//, "")}
+                    </div>
+                  </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">
+                    {item.compositeScore?.toFixed(2) ?? "—"}
+                  </td>
+                  <td className="px-4 py-2.5 whitespace-nowrap" style={{ color: "var(--accent)" }}>
+                    {"★".repeat(item.stars)}
+                    <span className="muted">{"☆".repeat(3 - item.stars)}</span>
+                  </td>
+                  <td className="px-4 py-2.5 muted text-xs max-w-lg">
+                    <div className="truncate">{item.whyGood ?? "—"}</div>
+                  </td>
+                  <td className="px-4 py-2.5 text-right tabular-nums muted text-xs">
+                    {item.blocks.length}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {pending > items.length && (
+            <p className="muted text-xs px-4 py-3">
+              Showing {items.length} of {pending}. The rest load once these are cleared — the
+              queue is fetched a session at a time so a large backlog can&apos;t truncate the copy
+              blocks it ships with.
+            </p>
+          )}
+        </div>
       ) : !current ? (
         <div className="p-8">
           <WhyEmpty screen="review" />
