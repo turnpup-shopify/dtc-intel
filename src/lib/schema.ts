@@ -21,6 +21,7 @@ const EXPECTED: { table: string; column: string; migration: string; feature: str
   { table: "run_log", column: "id", migration: "0006_run_log.sql", feature: "Diagnostics run log" },
   { table: "ad_hooks", column: "creative_path", migration: "0009_ad_creatives.sql", feature: "ad creative thumbnails" },
   { table: "landing_pages", column: "hidden", migration: "0010_hide_landing_pages.sql", feature: "hiding landing pages" },
+  { table: "app_settings", column: "key", migration: "0014_app_settings.sql", feature: "changing the score gate in the app" },
 ];
 
 export interface PendingMigration {
@@ -71,6 +72,7 @@ const CREATED_BY: Record<string, string> = {
   merge_landing_pages: "0005_landing_pages.sql",
   run_log: "0006_run_log.sql",
   prune_run_log: "0006_run_log.sql",
+  app_settings: "0014_app_settings.sql",
 };
 
 /**

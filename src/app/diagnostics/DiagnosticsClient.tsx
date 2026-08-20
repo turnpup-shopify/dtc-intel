@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import ScoreGate from "@/components/ScoreGate";
 import { errorMessage, getJson } from "@/lib/client";
 
 interface Run {
@@ -242,7 +243,10 @@ export default function DiagnosticsClient() {
         )}
       </section>
 
-      {/* ── 3. What it did ───────────────────────────────────────────────── */}
+      {/* ── 3. The one knob ──────────────────────────────────────────────── */}
+      <ScoreGate />
+
+      {/* ── 4. What it did ───────────────────────────────────────────────── */}
       <section className="panel overflow-hidden">
         <div className="flex items-center gap-2 p-3 text-xs">
           <h2 className="font-medium">Run log</h2>

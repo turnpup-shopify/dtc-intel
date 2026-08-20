@@ -1,6 +1,6 @@
-import { env } from "./env";
 import { compositeScore, extractAndScore } from "./extract";
 import { scraper } from "./scrape";
+import { getScoreThreshold } from "./settings";
 import { SCREENSHOT_BUCKET, db } from "./supabase";
 import { reduceHtml } from "./text";
 import { hostOf, normalizeUrl } from "./url";
@@ -81,9 +81,11 @@ export async function processUrl(
     });
     const composite = compositeScore(extraction.scores);
 
-    // The gate: below threshold never enters the review queue.
-    const status: "queued" | "discarded" =
-      composite < env.scoreThreshold ? "discarded" : "queued";
+    // The gate: below threshold never enters the review queue. Read per capture
+    // rather than at module load, so changing it in Diagnostics takes effect on
+    // the next capture instead of the next deploy.
+    const { value: threshold } = await getScoreThreshold();
+    const status: "queued" | "discarded" = composite < threshold ? "discarded" : "queued";
 
     const screenshotPath = await uploadScreenshot({
       buffer: scraped.screenshotBuffer,

@@ -35,14 +35,24 @@ export default function LogPanel() {
     setBuilding(true);
     setCopied(null);
     try {
-      const [health, diag] = await Promise.all([
+      const [health, diag, settings] = await Promise.all([
         fetch("/api/health", { cache: "no-store" })
           .then((r) => r.json())
           .catch((e) => ({ unreachable: String(e) })),
         fetch("/api/diagnostics", { cache: "no-store" })
           .then((r) => r.json())
           .catch((e) => ({ unreachable: String(e) })),
+        fetch("/api/settings", { cache: "no-store" })
+          .then((r) => r.json())
+          .catch((e) => ({ unreachable: String(e) })),
       ]);
+
+      // Worth its own line rather than being buried in config: "everything is
+      // getting rejected" is the most common complaint, and the answer is
+      // usually the gate's value together with which source set it.
+      const gate = settings?.scoreThreshold as
+        | { value: number; source: string; storageAvailable: boolean }
+        | undefined;
 
       const report = [
         `# dtc-intel report · ${new Date().toISOString()}`,
@@ -51,6 +61,9 @@ export default function LogPanel() {
         "```json",
         JSON.stringify(health, null, 2),
         "```",
+        ``,
+        `## Score gate`,
+        gate ? `- ${gate.value} (from ${gate.source})` : `- unavailable`,
         ``,
         `## Pipeline state`,
         "```json",

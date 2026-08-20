@@ -98,8 +98,8 @@ function diagnose(s: State, screen: "review" | "library") {
       title: `All ${s.pagesDiscarded} captured pages scored below the threshold.`,
       body:
         "They were fetched and scored, then auto-discarded before reaching this queue. That gate " +
-        "is deliberate, but if it is rejecting everything, lower SCORE_THRESHOLD (default 2.5).",
-      cta: { href: "/diagnostics", label: "Check the run log" },
+        "is deliberate, but if it is rejecting everything it is set too high.",
+      cta: { href: "/diagnostics", label: "Lower the score gate on Diagnostics" },
     };
   }
 

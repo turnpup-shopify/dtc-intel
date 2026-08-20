@@ -10,7 +10,7 @@
  * wrong model and they debug against it.
  */
 
-export const SPEC_UPDATED = "2026-08-19";
+export const SPEC_UPDATED = "2026-08-20";
 
 export interface Stage {
   id: string;
@@ -66,11 +66,11 @@ export const STAGES: Stage[] = [
     steps: [
       "Fetches the landing page and reduces it to text.",
       "Claude segments the copy into blocks and scores six dimensions.",
-      "Composite below SCORE_THRESHOLD is auto-discarded; at or above it is queued for Review.",
+      "Composite below the score gate is auto-discarded; at or above it is queued for Review. The gate is set on Diagnostics → Score gate and applies from the next capture.",
     ],
     writes: ["pages", "page_versions", "copy_blocks", "tags"],
     gotcha:
-      "“rejected 2.56” is not an error — it is the gate. The gate exists to keep junk out, not to judge quality; that is what stars are for. If everything is rejected, the threshold is too high.",
+      "“rejected 2.56” is not an error — it is the gate. The gate exists to keep junk out, not to judge quality; that is what stars are for. If everything is rejected, lower the gate on Diagnostics.",
   },
   {
     id: "review",
@@ -128,11 +128,12 @@ export const DEBUGGING: string[] = [
   "Hamburger → Logs → Copy report — config, pipeline counts, missing migrations, recent runs and those faults in one paste. Send this rather than describing the symptom.",
   "Diagnostics — the same picture server-side, plus the run log of every job and which migrations the schema is missing.",
   "An empty Review or Library says WHY it is empty, and links to the fix.",
+  "Diagnostics → Score gate — the threshold in force and where it comes from. A SCORE_THRESHOLD left in Vercel outranks the code default, and this is the only place that mismatch is visible.",
 ];
 
 /** Where things vanish without an error. Every one of these is by design. */
 export const SILENT_DROPS: string[] = [
-  "Scored below SCORE_THRESHOLD — captured, scored, then filed as discarded without ever appearing in Review.",
+  "Scored below the score gate — captured, scored, then filed as discarded without ever appearing in Review.",
   "Queued but never saved — in the database, invisible to Search.",
   "No readable headline on an ad — it still becomes a landing page, but never a hook.",
   "Past the sitemap daily cap — deferred to next week's run, not lost.",
